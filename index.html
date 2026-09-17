@@ -1,0 +1,2550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>$FUEL DASHBOARD</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* palette carried over from the site */
+  --bg:#101714;
+  --panel:#1b2520;
+  --accent:#96c99c;
+  --accent-dim:#82b189;
+  --line:#35453b;
+  --text:#f0f5f1;
+  --text-dim:#bcc7be;
+  --red:#eb9e8a;
+  --green:#b2e5ba;
+  --amber:#e0b358;
+  --heading:#eedc93;
+
+  /* aliases so component styles read plainly */
+  --panel-2:#16201b;
+  --rule:var(--line);
+  --ink:var(--text);
+  --muted:var(--text-dim);
+  --dim:#8fa093;
+  --safe:var(--green);
+  --signal:var(--amber);
+  --danger:var(--red);
+  --focus:var(--accent-dim);
+  --r:0px;
+
+  --serif:'Georgia','Iowan Old Style',serif;
+  --mono:'Courier New',monospace;
+  --sans:system-ui,sans-serif;
+  --display:'Press Start 2P','Courier New',monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg);color:var(--text);
+  font-family:var(--serif);font-size:16px;line-height:1.55;
+  font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;
+}
+.num,.mono{font-variant-numeric:tabular-nums}
+a{color:var(--accent-dim)}
+:focus-visible{outline:1px solid var(--accent);outline-offset:2px}
+button{font:inherit;cursor:pointer}
+button:disabled{cursor:default;opacity:.4}
+input,select{font-variant-numeric:tabular-nums}
+hr{border:0;border-top:1px solid var(--line);margin:22px 0}
+
+.wrap{max-width:760px;margin:0 auto;padding:0 24px 80px}
+@media(min-width:1080px){.wrap{max-width:1040px}}
+@media(min-width:1260px){.wrap{max-width:1200px}}
+
+/* ---- masthead ---- */
+header.top{border-bottom:1px solid var(--line);background:var(--bg);position:sticky;top:0;z-index:40}
+.top-in{max-width:1200px;margin:0 auto;padding:14px 24px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.mark{display:flex;align-items:center;gap:13px;margin-right:auto}
+.mark img{height:46px;width:46px;mix-blend-mode:lighten;flex:none}
+.mark .txt{font-family:var(--mono);font-size:18px;letter-spacing:.04em;color:var(--accent);display:flex;align-items:baseline;gap:10px}
+.mark .day{color:var(--amber);font-size:14px;letter-spacing:.02em}
+.foot{border-top:1px solid var(--line);margin-top:34px;padding:20px 0 0;font-family:var(--sans);font-size:12.5px;color:var(--text-dim)}
+.chip{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);padding:6px 12px;font-family:var(--sans);font-size:12.5px;color:var(--text-dim)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--dim);flex:none}
+.dot.ok{background:var(--green)}
+.dot.warn{background:var(--amber)}
+.dot.bad{background:var(--red)}
+
+.btn{
+  background:transparent;border:1px solid var(--accent-dim);color:var(--accent);
+  padding:10px 20px;font-family:var(--sans);font-size:14px;
+}
+.btn:hover:not(:disabled){background:rgba(150,201,156,.12)}
+.btn.primary{border-color:var(--accent);color:var(--bg);background:var(--accent)}
+.btn.primary:hover:not(:disabled){background:var(--green)}
+.btn.warnbtn{border-color:var(--amber);color:var(--amber)}
+.btn.warnbtn:hover:not(:disabled){background:rgba(224,179,88,.12)}
+.btn.sm{padding:5px 12px;font-size:12.5px}
+
+/* ---- tabs ---- */
+nav.tabs{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin:0 0 28px;overflow-x:auto}
+nav.tabs button{
+  background:none;border:0;border-bottom:2px solid transparent;color:var(--text-dim);
+  padding:10px 18px;font-family:var(--sans);font-size:14px;white-space:nowrap;
+  transition:color 120ms ease,border-color 120ms ease;
+}
+nav.tabs button:hover{color:var(--text)}
+nav.tabs button[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent)}
+section.tab{display:none}
+section.tab.on{display:block}
+
+/* ---- hero ---- */
+.hero{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:32px;align-items:center;padding:40px 0 34px;margin-bottom:8px;border-bottom:1px solid var(--line)}
+.hero h2{margin:0;font-family:var(--mono);font-size:13px;font-weight:400;letter-spacing:.02em;color:var(--text-dim)}
+.hero .big{font-size:42px;font-weight:400;line-height:1.15;letter-spacing:-.01em;margin:10px 0 8px;color:var(--accent)}
+.hero .sub{color:var(--text-dim);font-family:var(--sans);font-size:14px;max-width:52ch;line-height:1.55}
+@media(max-width:760px){.hero{grid-template-columns:1fr;padding-top:28px}}
+
+/* ---- panels ---- */
+.panel{background:var(--panel);border:1px solid var(--line);padding:24px;margin-bottom:16px}
+.panel > h3{margin:0 0 10px;font-family:var(--display);font-size:13px;font-weight:400;letter-spacing:0;line-height:1.5;color:var(--heading)}
+.panel > .note,p.note{color:var(--text-dim);font-family:var(--sans);font-size:13px;line-height:1.55;margin:0 0 18px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+@media(max-width:1000px){.grid4{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.grid4{grid-template-columns:1fr}}
+.bigstat{border:1px solid var(--line);background:var(--bg);padding:16px}
+.bigstat .k{font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim)}
+.bigstat .v{font-size:27px;color:var(--accent);margin:6px 0 2px;line-height:1.15}
+.bigstat .s{font-family:var(--sans);font-size:12.5px;color:var(--text-dim)}
+@media(max-width:860px){.grid2,.grid3{grid-template-columns:1fr}}
+
+.stat{border-top:1px solid var(--line);padding:11px 0}
+.stat .k{font-family:var(--sans);font-size:13px;color:var(--text-dim)}
+.stat .v{font-size:21px;color:var(--accent);margin-top:3px}
+.stat .v.small{font-size:16px}
+
+/* rows share a continuous rule: no row-gap, borders on both cells */
+dl.kv{margin:0;display:grid;grid-template-columns:auto 1fr;column-gap:28px;row-gap:0;font-family:var(--sans);font-size:13.5px}
+dl.kv dt,dl.kv dd{border-top:1px solid var(--line);padding:11px 0;align-self:center}
+dl.kv dt{color:var(--text-dim)}
+dl.kv dd{margin:0;text-align:right;font-family:var(--serif);font-size:15px;color:var(--accent)}
+dl.kv dt:first-child,dl.kv dt:first-child + dd{border-top:0}
+
+/* ---- forms ---- */
+label.f{display:block;margin:18px 0 8px;font-family:var(--sans);font-size:13px;color:var(--text-dim)}
+input[type=number],input[type=text],select{
+  width:100%;background:var(--bg);border:1px solid var(--line);color:var(--text);
+  padding:11px 12px;font-family:var(--mono);font-size:14px;
+}
+input:focus{outline:none;border-color:var(--accent-dim)}
+input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+input[type=number]{-moz-appearance:textfield}
+input[type=range]{width:100%;accent-color:var(--accent-dim)}
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.row > *{flex:1}
+.row .fixed{flex:none}
+
+.quote{border-left:2px solid var(--accent-dim);padding:2px 0 2px 14px;margin:20px 0;font-family:var(--sans);font-size:13px}
+.quote .line{display:flex;justify-content:space-between;gap:14px;padding:3px 0;color:var(--text-dim)}
+.quote .line strong{font-family:var(--serif);font-size:14px;font-weight:400;color:var(--accent)}
+
+/* ---- positions ---- */
+.pos{border:1px solid var(--line);background:var(--bg);padding:12px 15px;margin-bottom:7px;display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:14px;align-items:center}
+.pos.due{border-left:2px solid var(--green)}
+.pos.late{border-left:2px solid var(--amber)}
+.pos .idx{font-family:var(--mono);font-size:12px;color:var(--text-dim)}
+.pos .when{font-family:var(--sans);font-size:14px;color:var(--text)}
+.pos .meta{font-family:var(--sans);color:var(--text-dim);font-size:12px;margin-top:2px}
+.pos .amt{text-align:right;color:var(--accent)}
+.pos .amt small{display:block;font-family:var(--sans);color:var(--text-dim);font-size:11.5px}
+
+.batch{border:1px solid var(--line);background:var(--bg);margin-bottom:10px}
+.batch.due{border-left:2px solid var(--green)}
+.batch.late{border-left:2px solid var(--amber)}
+.batch-head{
+  display:grid;grid-template-columns:16px minmax(0,1fr) auto;gap:14px;align-items:center;
+  width:100%;padding:14px 16px;background:none;border:0;color:inherit;text-align:left;
+  font-family:var(--serif);font-size:16px;transition:background 120ms ease;
+}
+.batch-head:hover{background:rgba(150,201,156,.07)}
+.batch .twist{color:var(--text-dim);font-size:9px}
+.batch .when{display:block;font-family:var(--sans);font-size:14px}
+.batch .meta{display:block;font-family:var(--sans);color:var(--text-dim);font-size:12px;margin-top:3px}
+.batch .amt{text-align:right;color:var(--accent);white-space:nowrap}
+.batch .amt small{display:block;font-family:var(--sans);font-weight:400;color:var(--text-dim);font-size:11.5px}
+.batch-body{border-top:1px solid var(--line);background:var(--panel);padding:12px 16px 6px}
+.batch-body .pos{background:var(--bg)}
+.run{border-left:2px solid var(--amber);padding-left:14px;margin:16px 0;font-family:var(--sans);font-size:13px}
+.run strong{font-family:var(--serif);font-weight:400;color:var(--accent)}
+
+.pill{display:inline-block;border:1px solid var(--line);padding:1px 8px;font-family:var(--mono);font-size:11px;color:var(--text-dim);letter-spacing:.02em}
+.pill.safe{color:var(--green);border-color:rgba(178,229,186,.5)}
+.pill.bad{color:var(--red);border-color:rgba(235,158,138,.5)}
+.pill.warn{color:var(--amber);border-color:rgba(224,179,88,.5)}
+
+.derived{font-family:var(--sans);color:var(--dim);font-size:11.5px;line-height:1.5;margin-top:3px}
+.empty{font-family:var(--sans);color:var(--text-dim);padding:30px 0;text-align:center;font-size:14px}
+.mono{font-family:var(--mono);font-size:12.5px}
+.addr{font-family:var(--sans);color:var(--text-dim)}
+
+#toasts{position:fixed;right:20px;bottom:20px;z-index:100;display:flex;flex-direction:column;gap:9px;max-width:380px}
+.toast{border:1px solid var(--line);border-left:2px solid var(--accent-dim);background:var(--panel);padding:12px 15px;font-family:var(--sans);font-size:13px;line-height:1.5}
+.toast.err{border-left-color:var(--red)}
+.toast.ok{border-left-color:var(--green)}
+
+
+/* progress bar: an inset track, one gradient-segmented fill, a percentage on top */
+.progress{
+  position:relative;height:22px;padding:2px;margin:14px 0 8px;
+  background:#0d1310;
+  border:2px solid;border-color:#0b120e #4e6355 #4e6355 #0b120e;
+}
+.progress .fill{
+  height:100%;width:0;
+  background:repeating-linear-gradient(90deg,var(--accent) 0 11px,transparent 11px 13px);
+  transition:width .2s linear;
+}
+.progress .pct{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:12px;color:var(--text);
+}
+.progress.busy .fill{width:100%;animation:marquee .8s linear infinite}
+@keyframes marquee{from{background-position:0 0}to{background-position:13px 0}}
+.progress[hidden]{display:none}
+.progress.slim{height:10px;margin:0;padding:1px;border-width:0;border-top:1px solid var(--line)}
+.progress.slim .fill{background:repeating-linear-gradient(90deg,var(--accent) 0 7px,transparent 7px 9px)}
+.progress.slim .pct{display:none}
+
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-in">
+    <div class="mark"><img src="data:image/jpeg;base64,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AD49TOiJThQqh2Glc6S6huw4N1hqU/KwP2it1RqS94ONW38/Kd/1r3jky4XnY/M2Y5Bul56PzOkLK7pb3TjqYS4+YAriPVM0lVqS71Mjd109XLLj5TyeHk4rMqjV2oaQufT6ovQlwRkvxkHmPfKjrO62a/Wqnkt1jktzqWIb0klUJS928AQMNGG8c4OTnrUjwXBp4dOcpyT2kt3Rr3ksy9gNTCp1J1JKW0kuTo17zXiIi75KCtBVz0pJhmkjzz3XEZ86lyX24yDDqybnnIdg584VuRAeucXklxJJ5krxEQBERAEREAREQBERAEREAREQBERAFUgcGzRknADgSfSqaIDJ65j5ZGbkUrmt3uLWEg5cSCCOYwQvuA9GfCimH4p30LFt4+MpvO8Z7UBnsFXEwDLJ/wAi76FcYbpSt5iYfiX/AELWO+74R7U33fCPas6mNDbsV6oGczN+Rf8AQpseorY0cXzD8Q/6FpXfd8I9qb7vhHtTUaG8BqS1Y+6zf/Hf9C8OpLX+EmPmp3/QtIb7vhHtTfd8I9qwNDdT9R23HB0x/wAO/wChRZb9QO5Gb8g/6Fp/fd8I9qbzvGe1Z1GhtKa70js4E/5B/wBCgzV8DxwbN+Rd9C13vu+Ee1N93wj2pqNDLax5lB3Ipj+Kd9CoVTwyxzRva5jsBoD2luSXtPDPPgCsZ33fCPahcTzJKamTxERYAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAf/9k=" alt=""><span class="txt">FUEL <span id="protoDay" class="day"></span></span></div>
+    <span class="chip" id="chipNet"><span class="dot" id="dotNet"></span><span id="netTxt">connecting</span></span>
+    <span class="chip" id="chipClock" title="Difference between your device clock and chain time"><span class="dot" id="dotClock"></span><span id="clockTxt">clock —</span></span>
+    <button class="btn" id="btnConnect">Connect wallet</button>
+  </div>
+  <div id="globalBar" class="progress slim" hidden></div>
+</header>
+
+<div class="wrap">
+
+  <div class="hero">
+    <div>
+      <h2 id="heroLabel">Your next deadline</h2>
+      <div class="big" id="heroBig">Connect a wallet</div>
+      <div class="sub" id="heroSub">Positions, deadlines and penalty state load once a wallet is connected. Protocol figures below read without one.</div>
+    </div>
+    <div id="heroStats"></div>
+  </div>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" aria-selected="true" data-tab="mint">Mint</button>
+    <button role="tab" aria-selected="false" data-tab="positions">Positions</button>
+    <button role="tab" aria-selected="false" data-tab="stake">Stake</button>
+    <button role="tab" aria-selected="false" data-tab="burns">Burns &amp; fund</button>
+    <button role="tab" aria-selected="false" data-tab="stats">Stats</button>
+  </nav>
+
+  <!-- ============ MINT ============ -->
+  <section class="tab on" id="tab-mint">
+    <div class="grid2">
+      <div class="panel">
+        <h3>Open new mints</h3>
+        <p class="note">Each mint is its own contract, deployed at a deterministic address. A batch opens several in one transaction.</p>
+
+        <label class="f" for="mintCount">How many mints <span id="mintCountMax" class="addr"></span></label>
+        <div class="row">
+          <input type="number" id="mintCount" min="1" value="1">
+          <button class="btn fixed sm" id="btnMaxCount">Max</button>
+        </div>
+
+        <label class="f" for="mintTerm">Term in days <span id="mintTermRange" class="addr"></span></label>
+        <input type="range" id="mintTerm" min="7" max="100" value="30">
+        <div class="row" style="margin-top:6px">
+          <input type="number" id="mintTermNum" value="30">
+          <span class="fixed addr" id="mintUnlock">unlock —</span>
+        </div>
+
+        <div class="quote" id="mintQuote">
+          <div class="line"><span>Fee at current gas</span><strong id="qFee">—</strong></div>
+          <div class="line"><span>Sent with buffer</span><strong id="qSend">—</strong></div>
+          <div class="line"><span>Projected gross reward</span><strong id="qReward">—</strong></div>
+          <div class="line"><span>Starts at index</span><strong id="qIndex">—</strong></div>
+          <div style="color:var(--text-dim);margin-top:8px">The reward depends on how much the global rank climbs before you claim, which nobody knows yet. The low end assumes it barely moves; the high end assumes it grows by as much as exists today. It rises with the logarithm of that growth, so it moves slowly.</div>
+          <div style="color:var(--text-dim);margin-top:6px">The fee tracks gas price, so it is re-quoted the moment you send. Surplus refunds in the same transaction.</div>
+        </div>
+
+        <button class="btn primary" id="btnMint" style="width:100%" disabled>Connect wallet to mint</button>
+      </div>
+
+      <div class="panel">
+        <h3>Your wallet</h3>
+        <p class="note">Protocol-wide figures — rank, amplifier, bonus, term ceiling — are all on the stats tab.</p>
+        <div id="mintWallet"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ POSITIONS ============ -->
+  <section class="tab" id="tab-positions">
+    <div class="panel">
+      <h3>Your mints</h3>
+      <p class="note" id="posNote">Mints opened in the same transaction are grouped together. Open a group to see the individual mints inside it.</p>
+      <p class="note" id="rankBasis" style="margin-top:-10px"></p>
+      <div class="row" style="margin-bottom:14px">
+        <label class="fixed" style="flex:none;color:var(--muted);font-size:13px">
+          <input type="checkbox" id="onlyClaimable" style="width:auto"> Only claimable
+        </label>
+        <span style="flex:1"></span>
+        <button class="btn sm fixed" id="btnReload">Reload</button>
+      </div>
+      <div id="posBar" class="progress" hidden></div>
+      <div id="ownStats"></div>
+      <hr id="ownStatsRule" style="display:none">
+      <div id="posList"><div class="empty">Connect a wallet to load your mints.</div></div>
+      <div id="posRuns"></div>
+    </div>
+
+    <div class="panel">
+      <h3>Check any address</h3>
+      <p class="note">Mints and stakes are public state, so no wallet is needed to read them. Claiming is not possible here — only the holder can do that.</p>
+      <label class="f" for="lookupAddr" style="margin-top:0">Wallet address</label>
+      <div class="row">
+        <input type="text" id="lookupAddr" placeholder="0x…" autocomplete="off" spellcheck="false">
+        <button class="btn fixed" id="btnLookup">Look up</button>
+      </div>
+      <div id="lookupResult"></div>
+    </div>
+  </section>
+
+  <!-- ============ STAKE ============ -->
+  <section class="tab" id="tab-stake">
+    <div>
+      <div class="panel">
+        <h3>Stake FUEL</h3>
+        <p class="note">One stake per wallet. The rate is fixed when you stake and does not follow the current rate afterwards.</p>
+        <div id="stakeExisting"></div>
+        <div id="stakeForm">
+          <label class="f" for="stakeAmt">Amount</label>
+          <div class="row">
+            <input type="number" id="stakeAmt" min="0" step="any" value="0">
+            <button class="btn fixed sm" id="btnStakeMax">Max</button>
+          </div>
+          <label class="f" for="stakeTerm">Term in days <span id="stakeTermRange" class="addr"></span></label>
+          <input type="number" id="stakeTerm" value="30" min="1">
+          <div class="quote">
+            <div class="line"><span>Rate locked at stake time</span><strong id="stakeApy">—</strong></div>
+            <div class="line"><span>Projected reward at maturity</span><strong id="stakeProj">—</strong></div>
+            <div class="derived">Projection is derived from the rate and term, not read from a contract view.</div>
+          </div>
+          <button class="btn primary" id="btnStake" style="width:100%" disabled>Connect wallet to stake</button>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============ BURNS ============ -->
+  <section class="tab" id="tab-burns">
+    <div class="grid2">
+      <div class="panel" id="panelFuelBurn">
+        <h3>Buy and burn FUEL</h3>
+        <p class="note">Anyone can trigger the swap once a slot opens. The bought FUEL is burned.</p>
+        <div id="fuelBurnBody"></div>
+      </div>
+      <div class="panel" id="panelMoreBurn">
+        <h3>Buy and burn MORE</h3>
+        <p class="note">Same shape, separate contract and separate clock. The bought MORE is sent to the dead address.</p>
+        <div id="moreBurnBody"></div>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="panel">
+        <h3>Pump fund</h3>
+        <p class="note">Mint fees accumulate here for a full cycle. Sweeping moves the balance to the FUEL burner, which then releases it gradually — it is not burned on the spot.</p>
+        <div id="vaultBody"></div>
+      </div>
+      <div class="panel">
+        <h3>Fee distribution</h3>
+        <p class="note">Splits collected fees three ways. Anyone can trigger it; unlike the sweep and the burns, it pays the caller nothing.</p>
+        <div id="feeBody"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ STATS ============ -->
+  <section class="tab" id="tab-stats">
+    <div class="grid4" id="protoStats"></div>
+    <div class="panel"><h3>Everything else</h3><dl class="kv" id="protoDetail"></dl></div>
+    <div class="grid2">
+    <div class="panel">
+      <h3>History</h3>
+      <div class="row" style="align-items:flex-start">
+        <p class="note" style="flex:1">Neither of these is kept as a series on chain. Each line is today's real figure walked backwards through the events that moved it.</p>
+        <select id="statsRange" class="fixed" style="width:150px">
+          <option value="7">Last 7 days</option>
+          <option value="30">Last 30 days</option>
+          <option value="all" selected>All history</option>
+        </select>
+        <button class="btn sm fixed" id="btnStatsRefresh">Refresh</button>
+      </div>
+      <div id="statsBar" class="progress" hidden></div>
+      <div id="statsMsg" class="derived"></div>
+    </div>
+    <div class="panel">
+      <h3>Late-claim penalty</h3>
+      <p class="note">What a matured mint loses for every day you leave it unclaimed. The marker appears once one of yours is past its unlock date.</p>
+      <svg id="gauge" viewBox="0 0 300 150" width="100%" height="150" role="img" aria-label="Penalty curve"></svg>
+      <div class="derived" style="text-align:center">derived — no contract exposes this curve</div>
+    </div>
+    </div>
+    <div id="statsCharts"></div>
+  </section>
+
+
+  <div class="panel" id="donatePanel">
+    <h3>Support the dev here</h3>
+    <div class="row">
+      <span class="mono" id="donateAddr" style="flex:1;word-break:break-all"></span>
+      <button class="btn sm fixed" id="btnCopyDonate">Copy</button>
+    </div>
+  </div>
+
+  <footer class="foot">
+    unofficial front end for Robinhood Chain · RPCs: robinhood.com + drpc.org · Price: on-chain FUEL pair · Not financial advice.<br>
+    This dashboard can send transactions when you ask it to. Verify contract addresses yourself before approving anything.
+  </footer>
+</div>
+
+<div id="toasts"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js"></script>
+<script>
+"use strict";
+const E = window.ethers;
+
+/* ======================= config ======================= */
+const CHAIN = {
+  id: 4663,
+  hex: "0x1237",
+  name: "Robinhood Chain",
+  rpc: "https://rpc.mainnet.chain.robinhood.com",
+  rpcs: [
+    "https://rpc.mainnet.chain.robinhood.com",   // official, free, rate limited
+    "https://robinhood.drpc.org"                 // dRPC public endpoint for 4663
+  ],
+  explorer: "https://robin.etherscan.io",
+  currency: { name: "Ether", symbol: "ETH", decimals: 18 }
+};
+
+const A = {
+  token:       "0xe60C1F5d9bA7f62a392a78472a3Ab83DD62467A3",
+  more:        "0xc0F1A40512114b25cc1F30b5DF0bb48691405555",
+  batchMinter: "0xEaB771dB3883dC05DbEA1915F7e81910869bbc18",
+  feeDist:     "0x2f69ff61802d9738e562E438d1F6326389D95861",
+  vault:       "0x492d111487f097759340dc119DE5887d58c38bB0",
+  buyBurn:     "0x1f8e137117f78EF1EA84235F3E5423c46bF2D4A2",
+  moreBurner:  null,            // resolved on chain from feeDist.moreBurner()
+  moreBurnerExpected: "0x86f11A15E1793e7ce1F4264830d1973e80339A51",
+  pool:        "0xFF40c99525ffA6b6cf79ecbE370eF7C887D68F69",
+  multicall:   "0xcA11bde05977b3631167028862bE2a173976CA11"
+};
+
+const DONATE = "0x9faA8F035c13ce36553cE183068269d0bA36f8c6";
+
+// Neither burner exposes the caller's cut, so this comes from the protocol's own
+// documentation rather than from chain state. Labelled as such wherever it shows.
+const CALLER_REWARD_BPS = 150n;
+
+const FEE_BUFFER_BPS = 1200n;   // 12% over quote; surplus refunds in-transaction
+
+/* ======================= ABIs ======================= */
+const ABI = {};
+
+ABI.token = [{"inputs":[{"internalType":"address","name":"_owner","type":"address"}],"stateMutability":"nonpayable","type":"constructor"},{"inputs":[],"name":"AlreadyConfigured","type":"error"},{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"allowance","type":"uint256"},{"internalType":"uint256","name":"needed","type":"uint256"}],"name":"ERC20InsufficientAllowance","type":"error"},{"inputs":[{"internalType":"address","name":"sender","type":"address"},{"internalType":"uint256","name":"balance","type":"uint256"},{"internalType":"uint256","name":"needed","type":"uint256"}],"name":"ERC20InsufficientBalance","type":"error"},{"inputs":[{"internalType":"address","name":"approver","type":"address"}],"name":"ERC20InvalidApprover","type":"error"},{"inputs":[{"internalType":"address","name":"receiver","type":"address"}],"name":"ERC20InvalidReceiver","type":"error"},{"inputs":[{"internalType":"address","name":"sender","type":"address"}],"name":"ERC20InvalidSender","type":"error"},{"inputs":[{"internalType":"address","name":"spender","type":"address"}],"name":"ERC20InvalidSpender","type":"error"},{"inputs":[],"name":"FeeForwardFailed","type":"error"},{"inputs":[{"internalType":"uint256","name":"required","type":"uint256"},{"internalType":"uint256","name":"provided","type":"uint256"}],"name":"InsufficientFee","type":"error"},{"inputs":[],"name":"LPAlreadyMinted","type":"error"},{"inputs":[],"name":"MisconfiguredBuyAndBurn","type":"error"},{"inputs":[],"name":"MisconfiguredDistributor","type":"error"},{"inputs":[],"name":"MisconfiguredVault","type":"error"},{"inputs":[],"name":"NotConfigured","type":"error"},{"inputs":[],"name":"OnlyBuyAndBurn","type":"error"},{"inputs":[],"name":"OutOfBounds","type":"error"},{"inputs":[{"internalType":"address","name":"owner","type":"address"}],"name":"OwnableInvalidOwner","type":"error"},{"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"OwnableUnauthorizedAccount","type":"error"},{"inputs":[],"name":"ReentrancyGuardReentrantCall","type":"error"},{"inputs":[],"name":"RefundFailed","type":"error"},{"inputs":[],"name":"ZeroAddress","type":"error"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"owner","type":"address"},{"indexed":true,"internalType":"address","name":"spender","type":"address"},{"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Approval","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"claimer","type":"address"},{"indexed":false,"internalType":"uint256","name":"fee","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"gasPriceUsed","type":"uint256"}],"name":"ClaimFeePaid","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"address","name":"feeDistributor","type":"address"},{"indexed":false,"internalType":"address","name":"vault","type":"address"},{"indexed":false,"internalType":"address","name":"buyAndBurn","type":"address"}],"name":"ContractsConfigured","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"to","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"LPTokensMinted","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"uint256","name":"newMinGasPrice","type":"uint256"}],"name":"MinGasPriceUpdated","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"uint256","name":"rewardAmount","type":"uint256"}],"name":"MintClaimed","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"minter","type":"address"},{"indexed":false,"internalType":"uint256","name":"fee","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"gasPriceUsed","type":"uint256"}],"name":"MintFeePaid","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"previousOwner","type":"address"},{"indexed":true,"internalType":"address","name":"newOwner","type":"address"}],"name":"OwnershipTransferStarted","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"previousOwner","type":"address"},{"indexed":true,"internalType":"address","name":"newOwner","type":"address"}],"name":"OwnershipTransferred","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"uint256","name":"term","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"rank","type":"uint256"}],"name":"RankClaimed","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"uint256","name":"newSoloMintGas","type":"uint256"}],"name":"SoloMintGasUpdated","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"term","type":"uint256"}],"name":"Staked","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"from","type":"address"},{"indexed":true,"internalType":"address","name":"to","type":"address"},{"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Transfer","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"reward","type":"uint256"}],"name":"Withdrawn","type":"event"},{"inputs":[],"name":"APY_DAYS_STEP","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"APY_END","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"APY_START","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"BPS_DENOM","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"CLAIM_FEE_BPS","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"DAYS_IN_YEAR","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"EAA_PM_START","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"EAA_PM_STEP","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"EAA_RANK_STEP","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"GENESIS_RANK","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"INITIAL_LP_MINT","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"MAX_PENALTY_PCT","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"MAX_TERM_END","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"MAX_TERM_START","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"MIN_BURN","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"MIN_GAS_PRICE_MAX","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"MIN_STAKE","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"MIN_TERM","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"REWARD_AMPLIFIER_END","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"REWARD_AMPLIFIER_START","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"SECONDS_IN_DAY","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"SOLO_MINT_GAS_MAX","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"SOLO_MINT_GAS_MIN","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"TERM_AMPLIFIER","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"TERM_AMPLIFIER_THRESHOLD","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"WITHDRAWAL_WINDOW_DAYS","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"acceptOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"activeMinters","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"activeStakes","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"owner","type":"address"},{"internalType":"address","name":"spender","type":"address"}],"name":"allowance","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"value","type":"uint256"}],"name":"approve","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"user","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"burn","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"buyAndBurn","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"gasPrice","type":"uint256"}],"name":"claimFee","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"claimMintReward","outputs":[],"stateMutability":"payable","type":"function"},{"inputs":[{"internalType":"address","name":"other","type":"address"},{"internalType":"uint256","name":"pct","type":"uint256"}],"name":"claimMintRewardAndShare","outputs":[],"stateMutability":"payable","type":"function"},{"inputs":[{"internalType":"uint256","name":"pct","type":"uint256"},{"internalType":"uint256","name":"term","type":"uint256"}],"name":"claimMintRewardAndStake","outputs":[],"stateMutability":"payable","type":"function"},{"inputs":[{"internalType":"uint256","name":"term","type":"uint256"}],"name":"claimRank","outputs":[],"stateMutability":"payable","type":"function"},{"inputs":[{"internalType":"address","name":"_feeDistributor","type":"address"},{"internalType":"address","name":"_vault","type":"address"},{"internalType":"address","name":"_buyAndBurn","type":"address"}],"name":"configureContracts","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"decimals","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"gasPrice","type":"uint256"}],"name":"effectiveGasPrice","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"feeDistributor","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"genesisTs","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"getCurrentAMP","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"getCurrentAPY","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"getCurrentEAAR","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"getCurrentMaxTerm","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"rankDelta","type":"uint256"},{"internalType":"uint256","name":"amplifier","type":"uint256"},{"internalType":"uint256","name":"term","type":"uint256"},{"internalType":"uint256","name":"eaa","type":"uint256"}],"name":"getGrossReward","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"pure","type":"function"},{"inputs":[],"name":"getUserMint","outputs":[{"components":[{"internalType":"address","name":"user","type":"address"},{"internalType":"uint256","name":"term","type":"uint256"},{"internalType":"uint256","name":"maturityTs","type":"uint256"},{"internalType":"uint256","name":"rank","type":"uint256"},{"internalType":"uint256","name":"amplifier","type":"uint256"},{"internalType":"uint256","name":"eaaRate","type":"uint256"}],"internalType":"struct Token.MintInfo","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"getUserStake","outputs":[{"components":[{"internalType":"uint256","name":"term","type":"uint256"},{"internalType":"uint256","name":"maturityTs","type":"uint256"},{"internalType":"uint256","name":"amount","type":"uint256"},{"internalType":"uint256","name":"apy","type":"uint256"}],"internalType":"struct Token.StakeInfo","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"globalRank","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"lpMinted","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"minGasPrice","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"gasPrice","type":"uint256"}],"name":"mintFee","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"mintTokensForLP","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"name","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"pendingOwner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"renounceOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"_minGasPrice","type":"uint256"}],"name":"setMinGasPrice","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"_soloMintGas","type":"uint256"}],"name":"setSoloMintGas","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"soloMintGas","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"amount","type":"uint256"},{"internalType":"uint256","name":"term","type":"uint256"}],"name":"stake","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"symbol","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"totalSupply","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"totalTokenStaked","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"value","type":"uint256"}],"name":"transfer","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"from","type":"address"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"value","type":"uint256"}],"name":"transferFrom","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"newOwner","type":"address"}],"name":"transferOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"userBurns","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"userMints","outputs":[{"internalType":"address","name":"user","type":"address"},{"internalType":"uint256","name":"term","type":"uint256"},{"internalType":"uint256","name":"maturityTs","type":"uint256"},{"internalType":"uint256","name":"rank","type":"uint256"},{"internalType":"uint256","name":"amplifier","type":"uint256"},{"internalType":"uint256","name":"eaaRate","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"userStakes","outputs":[{"internalType":"uint256","name":"term","type":"uint256"},{"internalType":"uint256","name":"maturityTs","type":"uint256"},{"internalType":"uint256","name":"amount","type":"uint256"},{"internalType":"uint256","name":"apy","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"vault","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"withdraw","outputs":[],"stateMutability":"nonpayable","type":"function"}];
+
+ABI.batchMinter = [{"inputs":[{"internalType":"address","name":"_token","type":"address"}],"stateMutability":"nonpayable","type":"constructor"},{"inputs":[],"name":"FailedDeployment","type":"error"},{"inputs":[{"internalType":"uint256","name":"balance","type":"uint256"},{"internalType":"uint256","name":"needed","type":"uint256"}],"name":"InsufficientBalance","type":"error"},{"inputs":[{"internalType":"uint256","name":"required","type":"uint256"},{"internalType":"uint256","name":"provided","type":"uint256"}],"name":"InsufficientFee","type":"error"},{"inputs":[],"name":"InvalidCount","type":"error"},{"inputs":[{"internalType":"uint256","name":"index","type":"uint256"}],"name":"ProxyDoesNotExist","type":"error"},{"inputs":[],"name":"ReentrancyGuardReentrantCall","type":"error"},{"inputs":[],"name":"RefundFailed","type":"error"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"uint256","name":"startIndex","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"count","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"newTerm","type":"uint256"}],"name":"BatchClaimedAndReminted","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"uint256","name":"startIndex","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"count","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"term","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"feePaid","type":"uint256"}],"name":"BatchRankClaimed","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"uint256","name":"startIndex","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"count","type":"uint256"}],"name":"BatchRewardClaimed","type":"event"},{"inputs":[],"name":"MAX_BATCH","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"startIndex","type":"uint256"},{"internalType":"uint256","name":"count","type":"uint256"},{"internalType":"uint256","name":"newTerm","type":"uint256"}],"name":"batchClaimAndRemint","outputs":[],"stateMutability":"payable","type":"function"},{"inputs":[{"internalType":"uint256","name":"count","type":"uint256"},{"internalType":"uint256","name":"gasPrice","type":"uint256"}],"name":"batchClaimFee","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"startIndex","type":"uint256"},{"internalType":"uint256","name":"count","type":"uint256"},{"internalType":"uint256","name":"term","type":"uint256"}],"name":"batchClaimRank","outputs":[],"stateMutability":"payable","type":"function"},{"inputs":[{"internalType":"uint256","name":"startIndex","type":"uint256"},{"internalType":"uint256","name":"count","type":"uint256"}],"name":"batchClaimReward","outputs":[],"stateMutability":"payable","type":"function"},{"inputs":[{"internalType":"uint256","name":"count","type":"uint256"},{"internalType":"uint256","name":"gasPrice","type":"uint256"}],"name":"batchFee","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"implementation","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"proxiesOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"user","type":"address"},{"internalType":"uint256","name":"index","type":"uint256"}],"name":"proxyAddress","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"token","outputs":[{"internalType":"contract ITokenMintable","name":"","type":"address"}],"stateMutability":"view","type":"function"}];
+
+ABI.feeDist = [{"anonymous":false,"inputs":[{"indexed":false,"internalType":"uint256","name":"toVault","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"toBurn","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"toMore","type":"uint256"}],"name":"FeesDistributed","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"from","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"FeesReceived","type":"event"},{"inputs":[],"name":"BPS_DENOM","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"BURN_BPS","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"MIN_DISTRIBUTE","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"MORE_BPS","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"VAULT_BPS","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"distribute","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"moreBurner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"tokenBuyAndBurn","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"totalDistributed","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"vault","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"NothingToDistribute","type":"error"},{"inputs":[],"name":"VaultTransferFailed","type":"error"},{"inputs":[],"name":"ZeroAddress","type":"error"}];
+
+ABI.vault = [{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"from","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"Received","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"uint256","name":"genesisTs","type":"uint256"}],"name":"ClockStarted","type":"event"},{"inputs":[],"name":"ClockAlreadyStarted","type":"error"},{"inputs":[],"name":"ClockNotStarted","type":"error"},{"inputs":[{"internalType":"uint256","name":"cycleEndsAt","type":"uint256"}],"name":"CycleNotComplete","type":"error"},{"inputs":[],"name":"IncentiveTransferFailed","type":"error"},{"inputs":[],"name":"InvalidCycleLength","type":"error"},{"inputs":[],"name":"NothingToSweep","type":"error"},{"inputs":[],"name":"OnlyToken","type":"error"},{"inputs":[],"name":"ReentrancyGuardReentrantCall","type":"error"},{"inputs":[],"name":"ZeroAddress","type":"error"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"cycle","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"incentive","type":"uint256"},{"indexed":true,"internalType":"address","name":"caller","type":"address"}],"name":"Swept","type":"event"},{"inputs":[],"name":"BPS_DENOM","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"CYCLE_LENGTH","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"SWEEP_INCENTIVE_BPS","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"currentCycle","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"currentCycleEnd","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"genesisTs","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"sweep","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"tokenBuyAndBurn","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"totalSwept","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}];
+
+ABI.buyBurn = [{"inputs":[],"name":"DeadlinePassed","type":"error"},{"inputs":[],"name":"IntervalAlreadyBurned","type":"error"},{"inputs":[],"name":"InvalidInput","type":"error"},{"inputs":[],"name":"NotStartedYet","type":"error"},{"inputs":[],"name":"T","type":"error"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"ethAmount","type":"uint256"},{"indexed":true,"internalType":"uint256","name":"tokenBurnt","type":"uint256"},{"indexed":true,"internalType":"address","name":"caller","type":"address"}],"name":"BuyAndBurn","type":"event"},{"inputs":[],"name":"DAILY_ALLOCATION_ETH_BURNING","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"burnFees","outputs":[{"internalType":"uint256","name":"amount0","type":"uint256"},{"internalType":"uint256","name":"amount1","type":"uint256"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"distributeETHForBurning","outputs":[],"stateMutability":"payable","type":"function"},{"inputs":[{"internalType":"uint32","name":"","type":"uint32"}],"name":"ethIntervalsBurn","outputs":[{"internalType":"uint128","name":"amountAllocated","type":"uint128"},{"internalType":"uint128","name":"amountBurned","type":"uint128"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"ethToTokenSlippage","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"ethUsedForBurns","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"baseAmount","type":"uint256"}],"name":"getTokenQuoteForETH","outputs":[{"internalType":"uint256","name":"quote","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"lastBurnedETHIntervalStartTimestamp","outputs":[{"internalType":"uint32","name":"","type":"uint32"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"lastETHBurnIntervalNumber","outputs":[{"internalType":"uint32","name":"","type":"uint32"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"liquidityAdded","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"lpToken","outputs":[{"internalType":"uint248","name":"tokenId","type":"uint248"},{"internalType":"bool","name":"isWethToken0","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"pendingOwner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"startTimeStamp","outputs":[{"internalType":"uint32","name":"","type":"uint32"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint32","name":"_deadline","type":"uint32"}],"name":"swapETHForTokenAndBurn","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"tokenWethPool","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"totalETHBurn","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"totalTokenBurnt","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}];
+
+ABI.moreBurner = [{"inputs":[],"name":"DeadlinePassed","type":"error"},{"inputs":[],"name":"IntervalAlreadyBurned","type":"error"},{"inputs":[],"name":"InvalidInput","type":"error"},{"inputs":[],"name":"NotStartedYet","type":"error"},{"inputs":[],"name":"T","type":"error"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"ethAmount","type":"uint256"},{"indexed":true,"internalType":"uint256","name":"moreBurnt","type":"uint256"},{"indexed":true,"internalType":"address","name":"caller","type":"address"}],"name":"MoreBoughtAndBurned","type":"event"},{"inputs":[],"name":"DAILY_ALLOCATION_ETH_BURNING","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"distributeETHForBurning","outputs":[],"stateMutability":"payable","type":"function"},{"inputs":[{"internalType":"uint32","name":"","type":"uint32"}],"name":"ethIntervalsBurn","outputs":[{"internalType":"uint128","name":"amountAllocated","type":"uint128"},{"internalType":"uint128","name":"amountBurned","type":"uint128"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"ethToMoreSlippage","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"ethUsedForBurns","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"baseAmount","type":"uint256"}],"name":"getMoreQuoteForETH","outputs":[{"internalType":"uint256","name":"quote","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"lastBurnedETHIntervalStartTimestamp","outputs":[{"internalType":"uint32","name":"","type":"uint32"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"lastETHBurnIntervalNumber","outputs":[{"internalType":"uint32","name":"","type":"uint32"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"pendingOwner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"startTimeStamp","outputs":[{"internalType":"uint32","name":"","type":"uint32"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint32","name":"_deadline","type":"uint32"}],"name":"swapETHForMoreAndBurn","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"totalETHBurn","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"totalMoreBurnt","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}];
+
+ABI.multicall = [
+  "function aggregate3((address target, bool allowFailure, bytes callData)[] calls) payable returns ((bool success, bytes returnData)[] returnData)",
+  "function getEthBalance(address addr) view returns (uint256)"
+];
+
+ABI.pool = [
+  "function slot0() view returns (uint160 sqrtPriceX96, int24 tick, uint16 observationIndex, uint16 observationCardinality, uint16 observationCardinalityNext, uint8 feeProtocol, bool unlocked)",
+  "function token0() view returns (address)",
+  "function token1() view returns (address)",
+  "function liquidity() view returns (uint128)"
+];
+
+ABI.erc20 = [
+  "event Transfer(address indexed from, address indexed to, uint256 value)",
+  "function name() view returns (string)",
+  "function symbol() view returns (string)",
+  "function decimals() view returns (uint8)",
+  "function totalSupply() view returns (uint256)",
+  "function balanceOf(address) view returns (uint256)"
+];
+
+/* ======================= interfaces ======================= */
+const I = {
+  token:      new E.Interface(ABI.token),
+  batch:      new E.Interface(ABI.batchMinter),
+  feeDist:    new E.Interface(ABI.feeDist),
+  vault:      new E.Interface(ABI.vault),
+  buyBurn:    new E.Interface(ABI.buyBurn),
+  moreBurner: new E.Interface(ABI.moreBurner),
+  pool:       new E.Interface(ABI.pool),
+  mc:         new E.Interface(ABI.multicall),
+  erc20:      new E.Interface(ABI.erc20)
+};
+// every custom error in the system, for decoding reverts
+const ALL_ERRORS = new E.Interface([
+  ...ABI.token, ...ABI.batchMinter, ...ABI.feeDist,
+  ...ABI.vault, ...ABI.buyBurn, ...ABI.moreBurner
+].filter(f => f && f.type === "error"));
+
+/* ======================= state ======================= */
+const S = {
+  read: null,          // JsonRpcProvider
+  wallet: null,        // BrowserProvider
+  signer: null,
+  account: null,
+  chainOk: false,
+  mcOk: false,
+  skewMs: 0,           // chainTime - deviceTime
+  K: {},               // protocol constants
+  L: {},               // live protocol state
+  positions: [],       // {index, proxy, term, maturityTs, rank, amplifier, eaaRate, gross}
+  soloMint: null,
+  stake: null,
+  balance: 0n,
+  gasPrice: 0n,
+  wiring: [],
+  burners: {},         // fuel / more panel state
+  pool: []             // rpc endpoints, used round robin
+};
+
+// which batch groups the user has opened, kept across the 10s re-render
+const openBatches = new Set();
+
+/* ======================= helpers ======================= */
+const $  = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const el = (tag, cls, html) => { const n = document.createElement(tag); if (cls) n.className = cls; if (html != null) n.innerHTML = html; return n; };
+
+function chainNow() { return Math.floor((Date.now() + S.skewMs) / 1000); }
+
+// getGrossReward returns whole tokens, so projections need scaling into base units
+function unit() { return 10n ** BigInt(S.K.decimals ?? 18); }
+
+/* The term constants are held in seconds, but claimRank/stake take days. Detect
+   rather than assume: a protocol whose terms cap in the hundreds of days cannot
+   be storing a four-digit day count, so anything that large is seconds.
+   The minimum rounds up (the contract's check is exclusive, and the constant is
+   conventionally one second under a whole day); the maximum rounds down. */
+function asDays(v, kind) {
+  if (v == null) return null;
+  const n = Number(v);
+  if (!isFinite(n) || n <= 0) return null;
+  const day = Number(S.K.SECONDS_IN_DAY ?? 86400n);
+  if (n < 1000) return Math.round(n);
+  return kind === "min" ? Math.max(1, Math.ceil(n / day)) : Math.floor(n / day);
+}
+function minTermDays() { return asDays(S.K.MIN_TERM, "min") ?? 1; }
+function maxMintTermDays() { return asDays(S.L.maxTerm, "max") ?? asDays(S.K.MAX_TERM_START, "max") ?? 100; }
+function maxStakeTermDays() { return asDays(S.K.MAX_TERM_END, "max") ?? maxMintTermDays(); }
+function clampTerm(v, lo, hi) {
+  const n = Math.round(Number(v) || 0);
+  return Math.min(hi, Math.max(lo, n));
+}
+
+function short(a) { return a ? a.slice(0, 6) + "…" + a.slice(-4) : "—"; }
+function link(a) { return `<a class="mono" href="${CHAIN.explorer}/address/${a}" target="_blank" rel="noopener">${short(a)}</a>`; }
+
+function fmtEth(v, dp = 5) {
+  if (v == null) return "—";
+  const s = E.formatEther(v);
+  const n = Number(s);
+  if (n === 0) return "0 ETH";
+  if (n < 0.00001) return "<0.00001 ETH";
+  return n.toFixed(dp).replace(/0+$/, "").replace(/\.$/, "") + " ETH";
+}
+/* Dollar value alongside an ETH amount, when a price is available. */
+function usdSuffix(wei) {
+  if (!ETH_USD || wei == null) return "";
+  const v = Number(E.formatEther(wei)) * ETH_USD;
+  if (!isFinite(v) || v <= 0) return "";
+  if (v < 0.01) return " (~<$0.01)";
+  return ` (~$${v.toLocaleString(undefined, { maximumFractionDigits: v < 100 ? 2 : 0 })})`;
+}
+
+function fmtTok(v, dec = 18, sym = "FUEL") {
+  if (v == null) return "—";
+  const n = Number(E.formatUnits(v, dec));
+  if (n === 0) return "0 " + sym;
+  if (n >= 1e9) return (n / 1e9).toFixed(2) + "B " + sym;
+  if (n >= 1e6) return (n / 1e6).toFixed(2) + "M " + sym;
+  if (n >= 1e3) return n.toLocaleString(undefined, { maximumFractionDigits: 0 }) + " " + sym;
+  return n.toLocaleString(undefined, { maximumFractionDigits: 4 }) + " " + sym;
+}
+function fmtDur(secs) {
+  if (secs == null) return "—";
+  const neg = secs < 0; secs = Math.abs(secs);
+  const d = Math.floor(secs / 86400), h = Math.floor(secs % 86400 / 3600), m = Math.floor(secs % 3600 / 60);
+  let out;
+  if (d > 0) out = `${d}d ${h}h`;
+  else if (h > 0) out = `${h}h ${m}m`;
+  else out = `${m}m ${Math.floor(secs % 60)}s`;
+  return neg ? out + " ago" : out;
+}
+function fmtDate(ts) {
+  if (!ts) return "—";
+  return new Date(Number(ts) * 1000).toLocaleString(undefined,
+    { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function toast(msg, kind = "") {
+  const t = el("div", "toast " + kind, msg);
+  $("#toasts").appendChild(t);
+  setTimeout(() => t.remove(), 9000);
+}
+
+/* decode a revert into something a person can act on */
+function explain(err) {
+  const data = err?.data || err?.info?.error?.data || err?.error?.data;
+  if (typeof data === "string" && data.length >= 10) {
+    try {
+      const d = ALL_ERRORS.parseError(data);
+      if (d) {
+        const name = d.name;
+        const map = {
+          IntervalAlreadyBurned: "This slot has already been burned. Wait for the next one.",
+          NotStartedYet: "The contract's clock has not started yet.",
+          ClockNotStarted: "The cycle clock starts at the first mint. Nothing to do yet.",
+          NothingToSweep: "There is nothing in the fund to sweep.",
+          NothingToDistribute: "Not enough fees have accumulated to distribute.",
+          InsufficientFee: "The fee moved before the transaction landed. Re-quote and try again.",
+          ProxyDoesNotExist: "That mint index does not exist for this wallet.",
+          FailedDeployment: "That mint index is already in use.",
+          T: "The price oracle has too little history to quote right now.",
+          DeadlinePassed: "The transaction deadline passed before it landed.",
+          OutOfBounds: "A value was outside the range the contract accepts.",
+          NotConfigured: "The token has not been wired to its companion contracts."
+        };
+        if (name === "CycleNotComplete") {
+          return `The cycle is not over — it ends ${fmtDate(d.args[0])}.`;
+        }
+        return map[name] || ("Reverted with " + name + ".");
+      }
+    } catch (_) {}
+  }
+  const m = err?.shortMessage || err?.message || String(err);
+  if (/user rejected|denied/i.test(m)) return "Cancelled in the wallet.";
+  return m.length > 180 ? m.slice(0, 180) + "…" : m;
+}
+
+/* ======================= multicall ======================= */
+/* calls: [{to, iface, fn, args}]  ->  [decoded | null] (null = that one call failed) */
+async function mc(calls, provider) {
+  const p = provider || S.read;
+  if (!calls.length) return [];
+  if (!S.mcOk) {
+    // fall back to individual eth_calls if multicall is not present
+    return Promise.all(calls.map(async c => {
+      try {
+        const raw = await rpcRetry(prov => prov.call({ to: c.to, data: c.iface.encodeFunctionData(c.fn, c.args || []) }));
+        const r = c.iface.decodeFunctionResult(c.fn, raw);
+        return r.length === 1 ? r[0] : r;
+      } catch (_) { return null; }
+    }));
+  }
+  const payload = calls.map(c => ({
+    target: c.to,
+    allowFailure: true,                         // one bad view must not blank the page
+    callData: c.iface.encodeFunctionData(c.fn, c.args || [])
+  }));
+  const raw = await rpcRetry(prov => prov.call({
+    to: A.multicall,
+    data: I.mc.encodeFunctionData("aggregate3", [payload])
+  }));
+  const [results] = I.mc.decodeFunctionResult("aggregate3", raw);
+  return results.map((r, i) => {
+    if (!r.success) return null;
+    try {
+      const d = calls[i].iface.decodeFunctionResult(calls[i].fn, r.returnData);
+      return d.length === 1 ? d[0] : d;
+    } catch (_) { return null; }
+  });
+}
+function balCall(addr) { return { to: A.multicall, iface: I.mc, fn: "getEthBalance", args: [addr] }; }
+
+/* ======================= penalty (derived) ======================= */
+/* No contract exposes this. Standard curve, built on constants read from the token. */
+function penaltyPct(secsLate) {
+  if (secsLate <= 0) return 0;
+  const win = Number(S.K.WITHDRAWAL_WINDOW_DAYS ?? 7n);
+  const max = Number(S.K.MAX_PENALTY_PCT ?? 99n);
+  const day = Number(S.K.SECONDS_IN_DAY ?? 86400n);
+  const daysLate = Math.floor(secsLate / day);
+  if (daysLate > win - 1) return max;
+  const p = Math.floor(Math.pow(2, daysLate + 3) / win) - 1;
+  return Math.min(Math.max(p, 0), max);
+}
+function netAfterPenalty(gross, secsLate) {
+  const p = BigInt(penaltyPct(secsLate));
+  return gross * (100n - p) / 100n;
+}
+
+/* ======================= gauge ======================= */
+function drawGauge(secsLate) {
+  const svg = $("#gauge");
+  const W = 300, H = 150, padL = 26, padR = 10, padT = 12, padB = 26;
+  const win = Number(S.K.WITHDRAWAL_WINDOW_DAYS ?? 7n);
+  const pts = [];
+  for (let d = 0; d <= win; d += 0.05) {
+    const pct = penaltyPct(d * Number(S.K.SECONDS_IN_DAY ?? 86400n));
+    const x = padL + (d / win) * (W - padL - padR);
+    const y = padT + (pct / 100) * (H - padT - padB);
+    pts.push(`${x.toFixed(1)},${y.toFixed(1)}`);
+  }
+  let marker = "";
+  if (secsLate != null && secsLate > 0) {
+    const dLate = Math.min(secsLate / Number(S.K.SECONDS_IN_DAY ?? 86400n), win);
+    const x = padL + (dLate / win) * (W - padL - padR);
+    const y = padT + (penaltyPct(secsLate) / 100) * (H - padT - padB);
+    marker = `<line x1="${x}" y1="${padT}" x2="${x}" y2="${H - padB}" stroke="#eb9e8a" stroke-width="1.5"/>
+              <circle cx="${x}" cy="${y}" r="4" fill="#eb9e8a"/>`;
+  }
+  svg.innerHTML = `
+    <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${H - padB}" stroke="#35453b"/>
+    <line x1="${padL}" y1="${H - padB}" x2="${W - padR}" y2="${H - padB}" stroke="#35453b"/>
+    <polyline points="${pts.join(" ")}" fill="none" stroke="#e0b358" stroke-width="2"/>
+    ${marker}
+    <text x="2" y="${padT + 4}" fill="#bcc7be" font-size="9">100%</text>
+    <text x="8" y="${H - padB + 3}" fill="#bcc7be" font-size="9">0%</text>
+    <text x="${padL}" y="${H - 8}" fill="#bcc7be" font-size="9">on time</text>
+    <text x="${W - padR}" y="${H - 8}" fill="#bcc7be" font-size="9" text-anchor="end">${win}d late</text>`;
+}
+
+/* ======================= boot ======================= */
+async function boot() {
+  S.pool = CHAIN.rpcs.map(url => ({
+    url,
+    provider: new E.JsonRpcProvider(url, { chainId: CHAIN.id, name: "robinhood" }, { staticNetwork: true }),
+    ok: true,
+    benchedUntil: 0
+  }));
+  S.read = S.pool[0].provider;
+
+  // staticNetwork skips ethers' own check, so confirm each endpoint is chain 4663.
+  // An endpoint quietly serving a different chain would poison every read.
+  await Promise.all(S.pool.map(async e => {
+    try {
+      const id = await e.provider.send("eth_chainId", []);
+      e.ok = parseInt(id, 16) === CHAIN.id;
+    } catch (_) { e.ok = false; }
+  }));
+  if (!S.pool.some(e => e.ok)) S.pool.forEach(e => { e.ok = true; });   // all unreachable: try anyway
+
+  try {
+    const blk = await rpcRetry(p => p.getBlock("latest"));
+    S.skewMs = Number(blk.timestamp) * 1000 - Date.now();
+    setChip("#dotNet", "ok"); $("#netTxt").textContent = `${CHAIN.name} · block ${blk.number}`;
+    renderClockChip();
+  } catch (e) {
+    setChip("#dotNet", "bad"); $("#netTxt").textContent = "RPC unreachable";
+    toast("Could not reach the public RPC. It is rate limited — try again in a moment.", "err");
+    return;
+  }
+
+  // is Multicall3 actually deployed here, or just assumed?
+  try {
+    const code = await rpcRetry(p => p.getCode(A.multicall));
+    S.mcOk = code && code !== "0x";
+  } catch (_) { S.mcOk = false; }
+  if (!S.mcOk) toast("Multicall is not deployed on this chain — falling back to individual reads. Loading will be slower.", "err");
+
+  await busy(async () => { await loadConstants(); await loadLive(); });
+  fetchEthUsd().catch(() => {});      // dollar figures should not wait for a wallet
+  setInterval(tick, 1000);
+  setInterval(() => loadLive().catch(() => {}), 45000);
+}
+
+function setChip(sel, kind) { const d = $(sel); d.className = "dot " + kind; }
+
+function renderClockChip() {
+  const off = Math.round(S.skewMs / 1000);
+  const abs = Math.abs(off);
+  $("#clockTxt").textContent = abs < 5 ? "clock in sync" : `clock off by ${fmtDur(abs).replace(" ago","")}`;
+  setChip("#dotClock", abs < 5 ? "ok" : abs < 120 ? "warn" : "bad");
+  if (abs >= 120) $("#chipClock").title = "Your device clock is well off chain time. All deadlines here use chain time.";
+}
+
+/* ---- constants: read once ---- */
+async function loadConstants() {
+  const names = ["MIN_TERM","MAX_TERM_START","MAX_TERM_END","MAX_PENALTY_PCT","WITHDRAWAL_WINDOW_DAYS",
+    "SECONDS_IN_DAY","DAYS_IN_YEAR","GENESIS_RANK","MIN_STAKE","MIN_BURN","APY_START","APY_END",
+    "APY_DAYS_STEP","REWARD_AMPLIFIER_START","REWARD_AMPLIFIER_END","TERM_AMPLIFIER",
+    "TERM_AMPLIFIER_THRESHOLD","EAA_PM_START","EAA_PM_STEP","EAA_RANK_STEP","BPS_DENOM",
+    "CLAIM_FEE_BPS","MIN_GAS_PRICE_MAX","SOLO_MINT_GAS_MIN","SOLO_MINT_GAS_MAX","INITIAL_LP_MINT"];
+
+  const calls = names.map(n => ({ to: A.token, iface: I.token, fn: n }));
+  calls.push({ to: A.token, iface: I.token, fn: "decimals" });
+  calls.push({ to: A.token, iface: I.token, fn: "symbol" });
+  calls.push({ to: A.batchMinter, iface: I.batch, fn: "MAX_BATCH" });
+  calls.push({ to: A.feeDist, iface: I.feeDist, fn: "VAULT_BPS" });
+  calls.push({ to: A.feeDist, iface: I.feeDist, fn: "BURN_BPS" });
+  calls.push({ to: A.feeDist, iface: I.feeDist, fn: "MORE_BPS" });
+  calls.push({ to: A.feeDist, iface: I.feeDist, fn: "BPS_DENOM" });
+  calls.push({ to: A.feeDist, iface: I.feeDist, fn: "MIN_DISTRIBUTE" });
+  calls.push({ to: A.feeDist, iface: I.feeDist, fn: "moreBurner" });
+  calls.push({ to: A.vault,   iface: I.vault,   fn: "CYCLE_LENGTH" });
+  calls.push({ to: A.vault,   iface: I.vault,   fn: "SWEEP_INCENTIVE_BPS" });
+  calls.push({ to: A.vault,   iface: I.vault,   fn: "BPS_DENOM" });
+
+  const r = await mc(calls);
+  names.forEach((n, i) => S.K[n] = r[i]);
+  let k = names.length;
+  S.K.decimals   = r[k++]; S.K.symbol = r[k++] || "FUEL";
+  S.K.MAX_BATCH  = r[k++];
+  S.K.VAULT_BPS  = r[k++]; S.K.BURN_BPS = r[k++]; S.K.MORE_BPS = r[k++];
+  S.K.FD_BPS_DEN = r[k++]; S.K.MIN_DISTRIBUTE = r[k++];
+  A.moreBurner   = r[k++];
+  S.K.CYCLE_LENGTH = r[k++]; S.K.SWEEP_BPS = r[k++]; S.K.V_BPS_DEN = r[k++];
+
+  S.K.decimals = Number(S.K.decimals ?? 18);
+
+  // term bounds come from the contract, converted out of seconds
+  const minT = minTermDays();
+  $("#mintTerm").min = minT; $("#mintTermNum").min = minT;
+  $("#stakeTerm").min = minT;
+  const maxB = Number(S.K.MAX_BATCH ?? 50n);
+  $("#mintCount").max = maxB;
+  $("#mintCountMax").textContent = `· max ${maxB} per transaction`;
+
+  await loadPoolLayout();
+  drawGauge(null);
+}
+
+/* Which token is which in the pair, and how many decimals the other side has.
+   Read once — it cannot change for a deployed pool. */
+async function loadPoolLayout() {
+  try {
+    const r = await mc([
+      { to: A.pool, iface: I.pool, fn: "token0" },
+      { to: A.pool, iface: I.pool, fn: "token1" }
+    ]);
+    const t0 = r[0], t1 = r[1];
+    if (!t0 || !t1) { S.K.poolOk = false; return; }
+    const fuel = A.token.toLowerCase();
+    if (t0.toLowerCase() === fuel) { S.K.fuelIsToken0 = true; S.K.quoteToken = t1; }
+    else if (t1.toLowerCase() === fuel) { S.K.fuelIsToken0 = false; S.K.quoteToken = t0; }
+    else {
+      // neither side is FUEL — pricing off this pair would be meaningless
+      S.K.poolOk = false;
+      S.K.poolTokens = [t0, t1];
+      return;
+    }
+    const q = await mc([
+      { to: S.K.quoteToken, iface: I.erc20, fn: "decimals" },
+      { to: S.K.quoteToken, iface: I.erc20, fn: "symbol" }
+    ]);
+    S.K.quoteDecimals = Number(q[0] ?? 18);
+    S.K.quoteSymbol = q[1] || "ETH";
+    S.K.poolOk = true;
+  } catch (_) { S.K.poolOk = false; }
+}
+
+/* FUEL per one unit of the quote token, straight from the pair's current price.
+   sqrtPriceX96 squared is token1 per token0 in raw units, so the only thing that
+   changes between the two cases is which way up the ratio goes. */
+function priceFromSlot0(sqrtP) {
+  if (!S.K.poolOk || !sqrtP || sqrtP <= 0n) return null;
+  const Q192 = 1n << 192n;
+  const unitQuote = 10n ** BigInt(S.K.quoteDecimals ?? 18);
+  const sq = sqrtP * sqrtP;
+  const v = S.K.fuelIsToken0 ? unitQuote * Q192 / sq : unitQuote * sq / Q192;
+  return v > 0n ? v : null;
+}
+
+/* ---- live protocol state ---- */
+async function loadLive() {
+  const calls = [
+    { to: A.token, iface: I.token, fn: "globalRank" },
+    { to: A.token, iface: I.token, fn: "activeMinters" },
+    { to: A.token, iface: I.token, fn: "activeStakes" },
+    { to: A.token, iface: I.token, fn: "totalSupply" },
+    { to: A.token, iface: I.token, fn: "totalTokenStaked" },
+    { to: A.token, iface: I.token, fn: "getCurrentAPY" },
+    { to: A.token, iface: I.token, fn: "getCurrentAMP" },
+    { to: A.token, iface: I.token, fn: "getCurrentEAAR" },
+    { to: A.token, iface: I.token, fn: "getCurrentMaxTerm" },
+    { to: A.token, iface: I.token, fn: "genesisTs" },
+    { to: A.token, iface: I.token, fn: "minGasPrice" },
+    { to: A.token, iface: I.token, fn: "soloMintGas" },
+    { to: A.token, iface: I.token, fn: "owner" },
+    { to: A.token, iface: I.token, fn: "pendingOwner" },
+    { to: A.token, iface: I.token, fn: "feeDistributor" },
+    { to: A.token, iface: I.token, fn: "vault" },
+    { to: A.token, iface: I.token, fn: "buyAndBurn" },
+    { to: A.feeDist, iface: I.feeDist, fn: "vault" },
+    { to: A.feeDist, iface: I.feeDist, fn: "tokenBuyAndBurn" },
+    { to: A.feeDist, iface: I.feeDist, fn: "moreBurner" },
+    { to: A.feeDist, iface: I.feeDist, fn: "totalDistributed" },
+    { to: A.vault, iface: I.vault, fn: "tokenBuyAndBurn" },
+    { to: A.vault, iface: I.vault, fn: "genesisTs" },
+    { to: A.vault, iface: I.vault, fn: "currentCycle" },
+    { to: A.vault, iface: I.vault, fn: "currentCycleEnd" },
+    { to: A.vault, iface: I.vault, fn: "totalSwept" },
+    balCall(A.feeDist), balCall(A.vault), balCall(A.buyBurn), balCall(A.moreBurner),
+    { to: A.buyBurn, iface: I.buyBurn, fn: "owner" },
+    { to: A.buyBurn, iface: I.buyBurn, fn: "pendingOwner" },
+    { to: A.buyBurn, iface: I.buyBurn, fn: "startTimeStamp" },
+    { to: A.buyBurn, iface: I.buyBurn, fn: "lastETHBurnIntervalNumber" },
+    { to: A.buyBurn, iface: I.buyBurn, fn: "lastBurnedETHIntervalStartTimestamp" },
+    { to: A.buyBurn, iface: I.buyBurn, fn: "totalTokenBurnt" },
+    { to: A.buyBurn, iface: I.buyBurn, fn: "ethUsedForBurns" },
+    { to: A.buyBurn, iface: I.buyBurn, fn: "DAILY_ALLOCATION_ETH_BURNING" },
+    { to: A.buyBurn, iface: I.buyBurn, fn: "ethToTokenSlippage" },
+    { to: A.buyBurn, iface: I.buyBurn, fn: "liquidityAdded" },
+    { to: A.buyBurn, iface: I.buyBurn, fn: "tokenWethPool" },
+    { to: A.moreBurner, iface: I.moreBurner, fn: "owner" },
+    { to: A.moreBurner, iface: I.moreBurner, fn: "pendingOwner" },
+    { to: A.moreBurner, iface: I.moreBurner, fn: "startTimeStamp" },
+    { to: A.moreBurner, iface: I.moreBurner, fn: "lastETHBurnIntervalNumber" },
+    { to: A.moreBurner, iface: I.moreBurner, fn: "lastBurnedETHIntervalStartTimestamp" },
+    { to: A.moreBurner, iface: I.moreBurner, fn: "totalMoreBurnt" },
+    { to: A.moreBurner, iface: I.moreBurner, fn: "ethUsedForBurns" },
+    { to: A.moreBurner, iface: I.moreBurner, fn: "DAILY_ALLOCATION_ETH_BURNING" },
+    { to: A.moreBurner, iface: I.moreBurner, fn: "ethToMoreSlippage" },
+    { to: A.more, iface: I.erc20, fn: "decimals" },
+    { to: A.more, iface: I.erc20, fn: "symbol" },
+    { to: A.more, iface: I.erc20, fn: "name" },
+    { to: A.more, iface: I.erc20, fn: "totalSupply" },
+    { to: A.buyBurn, iface: I.buyBurn, fn: "getTokenQuoteForETH", args: [10n ** 18n] },
+    { to: A.pool, iface: I.pool, fn: "slot0" },
+    { to: A.pool, iface: I.pool, fn: "liquidity" }
+  ];
+
+  const r = await mc(calls);
+  let i = 0;
+  const L = S.L;
+  L.globalRank = r[i++]; L.activeMinters = r[i++]; L.activeStakes = r[i++];
+  L.totalSupply = r[i++]; L.totalStaked = r[i++];
+  L.apy = r[i++]; L.amp = r[i++]; L.eaar = r[i++]; L.maxTerm = r[i++];
+  L.tokenGenesis = r[i++]; L.minGasPrice = r[i++]; L.soloMintGas = r[i++];
+  L.tokenOwner = r[i++]; L.tokenPending = r[i++];
+  L.tk_feeDist = r[i++]; L.tk_vault = r[i++]; L.tk_buyBurn = r[i++];
+  L.fd_vault = r[i++]; L.fd_buyBurn = r[i++]; L.fd_moreBurner = r[i++]; L.totalDistributed = r[i++];
+  L.v_buyBurn = r[i++]; L.vaultGenesis = r[i++]; L.cycle = r[i++]; L.cycleEnd = r[i++]; L.totalSwept = r[i++];
+  L.balFeeDist = r[i++]; L.balVault = r[i++]; L.balBuyBurn = r[i++]; L.balMoreBurner = r[i++];
+
+  const fuel = {};
+  fuel.owner = r[i++]; fuel.pending = r[i++]; fuel.start = r[i++];
+  fuel.lastInterval = r[i++]; fuel.lastStart = r[i++];
+  fuel.burnt = r[i++]; fuel.ethUsed = r[i++]; fuel.daily = r[i++]; fuel.slippage = r[i++];
+  fuel.lpAdded = r[i++]; fuel.pool = r[i++];
+
+  const more = {};
+  more.owner = r[i++]; more.pending = r[i++]; more.start = r[i++];
+  more.lastInterval = r[i++]; more.lastStart = r[i++];
+  more.burnt = r[i++]; more.ethUsed = r[i++]; more.daily = r[i++]; more.slippage = r[i++];
+  L.moreDecimals = Number(r[i++] ?? 18); L.moreSymbol = r[i++] || null;
+  L.moreName = r[i++] || null; L.moreSupply = r[i++];
+  if (!L.moreSymbol) L.moreSymbol = "MORE";
+  L.oracleQuote = r[i++];
+  L.slot0 = r[i++];
+  L.poolLiquidity = r[i++];
+
+  // the pair is the price; the burn contract's TWAP is the backstop
+  const spot = priceFromSlot0(L.slot0 ? L.slot0[0] : null);
+  L.fuelPerEth = spot ?? (L.oracleQuote && L.oracleQuote > 0n ? L.oracleQuote : null);
+  L.priceSource = spot ? "pair" : (L.fuelPerEth ? "oracle" : null);
+
+  fuel.key = "fuel"; fuel.addr = A.buyBurn; fuel.iface = I.buyBurn; fuel.sym = S.K.symbol;
+  fuel.dec = S.K.decimals; fuel.bal = L.balBuyBurn; fuel.swapFn = "swapETHForTokenAndBurn";
+  fuel.quoteFn = "getTokenQuoteForETH"; fuel.dest = "burned";
+  more.key = "more"; more.addr = A.moreBurner; more.iface = I.moreBurner; more.sym = L.moreSymbol;
+  more.dec = L.moreDecimals; more.bal = L.balMoreBurner; more.swapFn = "swapETHForMoreAndBurn";
+  more.quoteFn = "getMoreQuoteForETH"; more.dest = "sent to the dead address";
+  S.burners = { fuel, more };
+
+  // slot length is not exposed — derive it per burner
+  for (const b of [fuel, more]) {
+    const st = Number(b.start ?? 0), ln = Number(b.lastInterval ?? 0), ls = Number(b.lastStart ?? 0);
+    b.slot = (ln > 0 && ls > st) ? Math.round((ls - st) / ln) : 600;
+    b.slotDerived = !(ln > 0 && ls > st);
+  }
+
+  // What the open slot actually has to spend. Needs the slot length, which is only
+  // known once the reads above have landed, so it is a second round trip.
+  try {
+    const t = chainNow();
+    const wanted = [];
+    for (const b of [fuel, more]) {
+      const st = Number(b.start ?? 0);
+      b.interval = (st > 0 && t >= st) ? Math.floor((t - st) / (b.slot || 600)) : null;
+      if (b.interval != null) wanted.push({ b, call: { to: b.addr, iface: b.iface, fn: "ethIntervalsBurn", args: [b.interval] } });
+    }
+    if (wanted.length) {
+      const res = await mc(wanted.map(w => w.call));
+      wanted.forEach((w, i) => {
+        const r = res[i];
+        w.b.allocated = r ? r[0] : null;
+        w.b.burnedThisSlot = r ? r[1] : null;
+        w.b.ready = (w.b.allocated != null && w.b.burnedThisSlot != null)
+          ? (w.b.allocated > w.b.burnedThisSlot ? w.b.allocated - w.b.burnedThisSlot : 0n)
+          : null;
+      });
+    }
+  } catch (_) {}
+
+  try { S.gasPrice = (await rpcRetry(p => p.getFeeData())).gasPrice ?? 0n; } catch (_) {}
+
+  buildWiring();
+  renderAll();
+  if (S.account) await loadUser();
+}
+
+/* ---- cross-check every address against what the chain says ---- */
+function buildWiring() {
+  const eq = (a, b) => a && b && a.toLowerCase() === b.toLowerCase();
+  const L = S.L;
+  S.wiring = [
+    { label: "Fee distributor", built: A.feeDist, sources: [["token.feeDistributor()", L.tk_feeDist]] },
+    { label: "Pump fund (vault)", built: A.vault, sources: [["token.vault()", L.tk_vault], ["feeDistributor.vault()", L.fd_vault]] },
+    { label: "FUEL burner", built: A.buyBurn, sources: [["token.buyAndBurn()", L.tk_buyBurn], ["feeDistributor.tokenBuyAndBurn()", L.fd_buyBurn], ["vault.tokenBuyAndBurn()", L.v_buyBurn]] },
+    { label: "MORE burner", built: A.moreBurnerExpected, sources: [["feeDistributor.moreBurner()", L.fd_moreBurner]], note: "The page uses whatever the fee distributor returns. The address above is the one supplied by hand, shown only so the two can be compared." }
+  ].map(w => {
+    const bad = w.sources.filter(([, v]) => v && !eq(v, w.built));
+    const seen = w.sources.filter(([, v]) => v);
+    return { ...w, ok: bad.length === 0 && seen.length > 0, unknown: seen.length === 0, bad };
+  });
+
+  // Nothing displays this now, so a mismatch has to announce itself.
+  const broken = S.wiring.filter(w => !w.ok && !w.unknown);
+  if (broken.length && !S.wiringWarned) {
+    S.wiringWarned = true;
+    broken.forEach(w => toast(
+      `${w.label}: the chain returns ${short(w.bad[0][1])}, this page is built with ${short(w.built)}. Do not sign anything until you know which is right.`, "err"));
+  }
+}
+
+/* ======================= wallet ======================= */
+async function connect() {
+  if (!window.ethereum) {
+    toast("No wallet found in this browser. Open this page in your wallet's browser, or install one.", "err");
+    return;
+  }
+  try {
+    S.wallet = new E.BrowserProvider(window.ethereum);
+    await S.wallet.send("eth_requestAccounts", []);
+    await busy(async () => {
+      await ensureChain();
+      S.signer = await S.wallet.getSigner();
+      S.account = await S.signer.getAddress();
+      $("#btnConnect").textContent = short(S.account);
+      window.ethereum.on?.("accountsChanged", () => location.reload());
+      window.ethereum.on?.("chainChanged", () => location.reload());
+    });
+    await loadUser();
+    toast("Wallet connected.", "ok");
+  } catch (e) { toast(explain(e), "err"); }
+}
+
+async function ensureChain() {
+  const net = await S.wallet.getNetwork();
+  if (Number(net.chainId) === CHAIN.id) { S.chainOk = true; return; }
+  try {
+    await S.wallet.send("wallet_switchEthereumChain", [{ chainId: CHAIN.hex }]);
+  } catch (e) {
+    if (e?.code === 4902 || /unrecognized|not added/i.test(e?.message || "")) {
+      await S.wallet.send("wallet_addEthereumChain", [{
+        chainId: CHAIN.hex, chainName: CHAIN.name,
+        rpcUrls: [CHAIN.rpc], nativeCurrency: CHAIN.currency,
+        blockExplorerUrls: [CHAIN.explorer]
+      }]);
+    } else throw e;
+  }
+  S.chainOk = true;
+}
+
+/* ======================= user data ======================= */
+/* Read every position an address holds. Used for the connected wallet and for
+   the lookup, which needs no wallet at all — it is all public state. */
+async function fetchMintsFor(u) {
+  const head = await mc([
+    { to: A.batchMinter, iface: I.batch, fn: "proxiesOf", args: [u] },
+    { to: A.token, iface: I.token, fn: "balanceOf", args: [u] },
+    { to: A.token, iface: I.token, fn: "userMints", args: [u] },
+    { to: A.token, iface: I.token, fn: "userStakes", args: [u] },
+    { to: A.token, iface: I.token, fn: "globalRank" }
+  ]);
+
+  const count = Number(head[0] ?? 0n);
+  const balance = head[1] ?? 0n;
+  // read fresh rather than reusing whatever loadLive left behind — the projection
+  // is worthless without it, and a stale one is worse than none
+  const gRank = head[4];
+  if (gRank != null) S.L.globalRank = gRank;
+
+  const solo = head[2];
+  const soloMint = (solo && solo[0] && solo[0] !== E.ZeroAddress)
+    ? { index: null, proxy: u, user: solo[0], term: solo[1], maturityTs: solo[2], rank: solo[3], amplifier: solo[4], eaaRate: solo[5] }
+    : null;
+
+  const st = head[3];
+  const stake = (st && st[2] && st[2] > 0n)
+    ? { term: st[0], maturityTs: st[1], amount: st[2], apy: st[3] }
+    : null;
+
+  // proxy addresses, then the mint stored under each
+  let proxies = [];
+  if (count > 0) {
+    const idxCalls = [];
+    for (let i = 0; i < count; i++) idxCalls.push({ to: A.batchMinter, iface: I.batch, fn: "proxyAddress", args: [u, i] });
+    proxies = await chunked(idxCalls);
+  }
+
+  const mintCalls = proxies.map(p => ({ to: A.token, iface: I.token, fn: "userMints", args: [p] }));
+  const mints = mintCalls.length ? await chunked(mintCalls) : [];
+
+  const list = [];
+  mints.forEach((m, i) => {
+    if (!m || !m[0] || m[0] === E.ZeroAddress) return;   // index consumed but nothing live
+    list.push({ index: i, proxy: proxies[i], user: m[0], term: m[1], maturityTs: m[2], rank: m[3], amplifier: m[4], eaaRate: m[5] });
+  });
+
+  // Exact gross reward, straight from the pure function. The contract floors the
+  // rank delta at 2 (log2(1) is 0, log2(0) reverts) — but that floor is only valid
+  // when the global rank is genuinely known. If it isn't, the projection is
+  // unavailable, not small: flooring a missing value to 2 produces a believable
+  // number roughly log2(realDelta) times too low.
+  const all = soloMint ? [...list, soloMint] : list;
+  const rankKnown = gRank != null && gRank > 0n;
+  if (all.length && rankKnown) {
+    const gcalls = all.map(p => {
+      let delta = gRank > p.rank ? gRank - p.rank : 2n;
+      if (delta < 2n) delta = 2n;
+      p.rankDelta = delta;
+      return { to: A.token, iface: I.token, fn: "getGrossReward", args: [delta, p.amplifier, p.term, p.eaaRate] };
+    });
+    const gross = await chunked(gcalls);
+    all.forEach((p, i) => p.gross = gross[i] == null ? null : gross[i] * unit());
+
+  } else {
+    all.forEach(p => { p.gross = null; p.rankDelta = null; });
+  }
+
+  return { address: u, positions: list, soloMint, stake, balance, rankKnown, proxyCount: count };
+}
+
+async function loadUser() {
+  if (!S.account) return;
+  const pb = $("#posBar");
+  renderProgress(pb, null);
+  setBusy(1);
+  try {
+  const d = await fetchMintsFor(S.account);
+  S.userData = d;
+  S.positions = d.positions;
+  S.soloMint = d.soloMint;
+  S.stake = d.stake;
+  S.balance = d.balance;
+  if (!d.rankKnown && (d.positions.length || d.soloMint)) {
+    toast("Could not read the global rank, so reward projections are unavailable. Press reload.", "err");
+  }
+  renderPositions();
+  renderMintSide();
+  renderStake();
+  renderHero();
+  quoteMint();
+  const rule = $("#ownStatsRule");
+  if (rule) rule.style.display = (d.positions.length || d.soloMint) ? "" : "none";
+  renderWalletStats("#ownStats", (d.positions.length || d.soloMint) ? d : null).catch(() => {});
+  } finally {
+    hideProgress(pb);
+    setBusy(-1);
+  }
+}
+
+/* keep each multicall payload to a sane size for a rate-limited RPC */
+async function chunked(calls, size = 60) {
+  const out = [];
+  for (let i = 0; i < calls.length; i += size) {
+    out.push(...await mc(calls.slice(i, i + size)));
+  }
+  return out;
+}
+
+/* ======================= render ======================= */
+/* Which day of the protocol it is, counted from the token's genesis. */
+function renderProtocolDay() {
+  const n = $("#protoDay");
+  if (!n) return;
+  const gen = Number(S.L.tokenGenesis ?? 0);
+  if (!gen) { n.textContent = ""; n.removeAttribute("title"); return; }
+  const day = Math.floor((chainNow() - gen) / Number(S.K.SECONDS_IN_DAY ?? 86400n)) + 1;
+  n.textContent = "Day " + day.toLocaleString();
+
+  // the reward amplifier drops one per day, so it doubles as a check on the count
+  let note = "Protocol opened " + fmtDate(gen);
+  const start = S.K.REWARD_AMPLIFIER_START != null ? Number(S.K.REWARD_AMPLIFIER_START) : null;
+  const amp = S.L.amp != null ? Number(S.L.amp) : null;
+  const floor = S.K.REWARD_AMPLIFIER_END != null ? Number(S.K.REWARD_AMPLIFIER_END) : null;
+  if (start != null && amp != null && !(floor != null && amp <= floor)) {
+    const implied = start - amp + 1;
+    note += ` · the amplifier has fallen ${(start - amp).toLocaleString()} from ${start.toLocaleString()}, which puts it at day ${implied.toLocaleString()}`;
+    if (Math.abs(implied - day) > 1) note += " — these disagree";
+  }
+  n.title = note;
+}
+
+function renderAll() {
+  renderHero(); renderMintSide(); renderStake(); renderBurns();
+  renderVault(); renderFees(); renderProtocolDay(); renderProtocolStats(); renderHeroStats();
+}
+
+function bigStat(k, v, sub) {
+  return `<div class="bigstat"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${sub}</div></div>`;
+}
+
+/* getCurrentEAAR returns tenths of a percent on this deployment: 100 is +10.0%.
+   Verified against the live value, not assumed from the contract it forks. */
+function eaaBonusPct() {
+  if (S.L.eaar == null) return null;
+  const v = Number(S.L.eaar) / 10;
+  return isFinite(v) ? v : null;
+}
+function eaaBonusLabel() {
+  const v = eaaBonusPct();
+  return v == null ? "—" : (v >= 0 ? "+" : "") + v.toFixed(1) + "%";
+}
+
+/* The four headline figures, shared by the hero corner and the stats tab. */
+function headlineFigures() {
+  const L = S.L, K = S.K;
+  const pooled = [L.balFeeDist, L.balVault, L.balBuyBurn, L.balMoreBurner]
+    .reduce((a, v) => a + (v ?? 0n), 0n);
+  let price = K.poolOk === false ? "no pair" : "—";
+  if (L.fuelPerEth && L.fuelPerEth > 0n) {
+    const per = Number(E.formatUnits(L.fuelPerEth, K.decimals ?? 18));
+    price = ETH_USD && per > 0 ? `$${(ETH_USD / per).toPrecision(2)}` : "awaiting price";
+  }
+  return {
+    pooled,
+    price,
+    rank: L.globalRank != null ? Number(L.globalRank).toLocaleString() : "—",
+    open: L.activeMinters != null ? Number(L.activeMinters).toLocaleString() : "—",
+    supply: L.totalSupply != null ? fmtTok(L.totalSupply, K.decimals, "").trim() : "—"
+  };
+}
+
+function renderHeroStats() {
+  const host = $("#heroStats");
+  if (!host) return;
+  const f = headlineFigures();
+  host.innerHTML =
+    statRow("ETH held across the contracts", fmtEth(f.pooled)) +
+    statRow("Price", f.price, true) +
+    statRow("Global rank", f.rank, true) +
+    statRow("Mints open protocol-wide", f.open, true);
+}
+
+function renderProtocolStats() {
+  const host = $("#protoStats");
+  if (!host) return;
+  const L = S.L, K = S.K;
+  const f = headlineFigures();
+  const amp = L.amp != null ? Number(L.amp) : null;
+  const ampFloor = K.REWARD_AMPLIFIER_END != null ? Number(K.REWARD_AMPLIFIER_END) : null;
+  const maxT = L.maxTerm != null ? maxMintTermDays() : null;
+  const startCeiling = asDays(K.MAX_TERM_START, "max");
+  host.innerHTML =
+    bigStat("Global rank", f.rank, "one step per mint opened") +
+    bigStat("Price", f.price, `per ${K.symbol}`) +
+    bigStat("Total supply", f.supply, `${K.symbol} in existence`) +
+    bigStat("Pooled ETH", fmtEth(f.pooled).replace(" ETH", ""),
+      "burn pools, pump fund, unsplit fees") +
+    bigStat("Max term", maxT != null ? maxT.toLocaleString() + " days" : "—",
+      startCeiling && maxT > startCeiling ? `up from ${startCeiling} at launch` : "grows with participation") +
+    bigStat("Reward amplifier", amp != null ? amp.toLocaleString() : "—",
+      ampFloor != null && amp != null && amp <= ampFloor ? "at its floor" : "drops 1 per day") +
+    bigStat("Early adopter bonus", eaaBonusLabel(), "decays as more people mint") +
+    bigStat("Open mints", f.open, "across every wallet");
+
+  const d = $("#protoDetail");
+  if (!d) return;
+  const gen = Number(L.tokenGenesis ?? 0);
+  const row = (k, v) => `<dt>${k}</dt><dd>${v}</dd>`;
+  d.innerHTML =
+    row("Protocol day", gen ? Math.floor((chainNow() - gen) / Number(K.SECONDS_IN_DAY ?? 86400n)) + 1 : "—") +
+    row("Opened", gen ? fmtDate(gen) : "—") +
+    row("Term range", `${minTermDays()} to ${maxT ?? "—"} days`) +
+    row("Mints per transaction", K.MAX_BATCH != null ? Number(K.MAX_BATCH).toLocaleString() : "—") +
+    row("Free claim window", `1 day, then a penalty to ${K.MAX_PENALTY_PCT != null ? Number(K.MAX_PENALTY_PCT) : "—"}% over ${K.WITHDRAWAL_WINDOW_DAYS != null ? Number(K.WITHDRAWAL_WINDOW_DAYS) : "—"} days`) +
+    row("Staking rate now", L.apy != null ? Number(L.apy) + "%" : "—") +
+    row("Staking rate floor", K.APY_END != null ? Number(K.APY_END) + "%" : "—") +
+    row("Rate drops one point every", K.APY_DAYS_STEP != null ? Number(K.APY_DAYS_STEP) + " days" : "—") +
+    row("Longest stake term", maxStakeTermDays().toLocaleString() + " days") +
+    row("Minimum stake", fmtTok(K.MIN_STAKE, K.decimals, K.symbol)) +
+    row("Total staked", fmtTok(L.totalStaked, K.decimals, K.symbol)) +
+    row("Open stakes", L.activeStakes != null ? Number(L.activeStakes).toLocaleString() : "—") +
+    row(`${K.symbol} burned`, fmtTok(S.burners.fuel?.burnt, K.decimals, K.symbol)) +
+    row(`${L.moreSymbol || "MORE"} burned`, fmtTok(S.burners.more?.burnt, L.moreDecimals ?? 18, L.moreSymbol || "MORE")) +
+    row("Fees split so far", fmtEth(L.totalDistributed)) +
+    row("Swept from the pump fund", fmtEth(L.totalSwept));
+}
+
+function renderHero() {
+  const big = $("#heroBig"), sub = $("#heroSub"), lab = $("#heroLabel");
+  if (!S.account) {
+    lab.textContent = "Your next deadline";
+    big.textContent = "Connect a wallet";
+    sub.textContent = "Your mints, their unlock dates and what each is worth load once a wallet is connected. The figures alongside read without one.";
+    drawGauge(null);
+    return;
+  }
+  const all = S.soloMint ? [...S.positions, S.soloMint] : S.positions;
+  if (!all.length) {
+    lab.textContent = "Your next deadline";
+    big.textContent = "No open mints";
+    sub.textContent = "Open one from the mint tab. Each mint is its own contract, so a batch of ten is ten addresses.";
+    drawGauge(null);
+    return;
+  }
+  const now = chainNow();
+  const overdue = all.filter(p => Number(p.maturityTs) <= now).sort((a, b) => Number(a.maturityTs) - Number(b.maturityTs));
+  if (overdue.length) {
+    const worst = overdue[0];
+    const late = now - Number(worst.maturityTs);
+    const pct = penaltyPct(late);
+    lab.textContent = pct > 0 ? "Losing value now" : "Claimable, penalty-free";
+    big.textContent = pct > 0 ? `${pct}% penalty` : "Claim free today";
+    sub.innerHTML = pct > 0
+      ? `${overdue.length} mint${overdue.length > 1 ? "s" : ""} past the unlock date — the oldest by ${fmtDur(late).replace(" ago","")}. <span class="derived">penalty derived, not read from chain</span>`
+      : `${overdue.length} mint${overdue.length > 1 ? "s" : ""} ready. The free window closes in ${fmtDur(Number(S.K.SECONDS_IN_DAY ?? 86400n) - late)}.`;
+    drawGauge(late);
+  } else {
+    const next = all.slice().sort((a, b) => Number(a.maturityTs) - Number(b.maturityTs))[0];
+    lab.textContent = "Your next unlock";
+    big.textContent = fmtDur(Number(next.maturityTs) - now);
+    sub.textContent = `${fmtDate(next.maturityTs)} · ${all.length} mint${all.length > 1 ? "s" : ""} open`;
+    drawGauge(null);
+  }
+}
+
+function statRow(k, v, small) {
+  return `<div class="stat"><div class="k">${k}</div><div class="v${small ? " small" : ""}">${v}</div></div>`;
+}
+
+function renderMintSide() {
+  const L = S.L;
+  const maxT = maxMintTermDays(), minT = minTermDays();
+  $("#mintTerm").max = maxT; $("#mintTermNum").max = maxT;
+  $("#mintTerm").min = minT; $("#mintTermNum").min = minT;
+  const startCeiling = asDays(S.K.MAX_TERM_START, "max");
+  $("#mintTermRange").textContent = `· ${minT} to ${maxT}` +
+    (startCeiling && maxT > startCeiling ? ` — the ceiling has risen from ${startCeiling}` : "");
+  // the ceiling can climb between loads; never leave the field above it
+  const cur = parseInt($("#mintTermNum").value || "0", 10);
+  const fixed = clampTerm(cur || maxT, minT, maxT);
+  if (fixed !== cur) { $("#mintTermNum").value = fixed; $("#mintTerm").value = fixed; }
+
+  $("#stakeTerm").max = maxStakeTermDays();
+
+  $("#mintWallet").innerHTML = S.account
+    ? statRow("Your balance", fmtTok(S.balance, S.K.decimals, S.K.symbol), true) +
+      statRow("Mints you have opened", String(S.positions.length + (S.soloMint ? 1 : 0)), true) +
+      statRow("Next index", String(S.positions.length ? S.positions[S.positions.length - 1].index + 1 : 0), true)
+    : `<div class="empty">Not connected.</div>`;
+
+  $("#btnMint").disabled = !S.account;
+  $("#btnMint").textContent = S.account ? "Open mints" : "Connect wallet to mint";
+}
+
+async function quoteMint() {
+  const count = BigInt(Math.max(1, parseInt($("#mintCount").value || "1", 10)));
+  const term = BigInt(Math.max(1, parseInt($("#mintTermNum").value || "1", 10)));
+  const gp = S.gasPrice || 0n;
+  $("#mintUnlock").textContent = "unlock " + fmtDate(chainNow() + Number(term) * Number(S.K.SECONDS_IN_DAY ?? 86400n));
+
+  if (!gp) { $("#qFee").textContent = "—"; return; }
+  const r = await mc([
+    { to: A.batchMinter, iface: I.batch, fn: "batchFee", args: [count, gp] },
+    { to: A.token, iface: I.token, fn: "getGrossReward", args: [2n, S.L.amp ?? 0n, term, S.L.eaar ?? 0n] },
+    { to: A.token, iface: I.token, fn: "getGrossReward", args: [S.L.globalRank > 2n ? S.L.globalRank : 2n, S.L.amp ?? 0n, term, S.L.eaar ?? 0n] }
+  ]);
+  const fee = r[0], floor = r[1], ref = r[2];
+  $("#qFee").textContent = fee != null ? fmtEth(fee) : "unavailable";
+  $("#qSend").textContent = fee != null ? fmtEth(fee + fee * FEE_BUFFER_BPS / 10000n) : "—";
+  $("#qReward").textContent = (floor != null && ref != null)
+    ? `${fmtTok(floor * count * unit(), S.K.decimals, S.K.symbol)} to ${fmtTok(ref * count * unit(), S.K.decimals, S.K.symbol)}`
+    : "—";
+  $("#qIndex").textContent = S.account ? String(S.positions.length ? S.positions[S.positions.length - 1].index + 1 : 0) : "connect wallet";
+}
+
+/* Mints opened in one transaction share a term, land on the same second, and take
+   contiguous indexes. That is enough to rebuild the batches from state alone —
+   no log scan, which this RPC would not enjoy. A remint of part of a batch splits
+   it, which is correct: those mints now have their own maturity. */
+function groupBatches(list) {
+  const out = [];
+  list.slice().sort((a, b) => a.index - b.index).forEach(p => {
+    const g = out[out.length - 1];
+    if (g && p.index === g.start + g.count
+          && String(p.maturityTs) === String(g.maturityTs)
+          && String(p.term) === String(g.term)) {
+      g.count++; g.items.push(p);
+    } else {
+      out.push({ start: p.index, count: 1, term: p.term, maturityTs: p.maturityTs, items: [p] });
+    }
+  });
+  out.forEach(g => {
+    g.unknownGross = g.items.some(p => p.gross == null);
+    g.gross = g.unknownGross ? null : g.items.reduce((a, p) => a + p.gross, 0n);
+    const ranks = g.items.map(p => p.rank);
+    g.rankLo = ranks.reduce((a, b) => a < b ? a : b);
+    g.rankHi = ranks.reduce((a, b) => a > b ? a : b);
+  });
+  return out;
+}
+
+function batchCard(b, now, opts) {
+  const readOnly = opts?.readOnly;
+  const openSet = opts?.openSet || openBatches;
+  const due = Number(b.maturityTs) <= now;
+  const pct = due ? penaltyPct(now - Number(b.maturityTs)) : 0;
+  const net = b.gross == null ? null : (due ? netAfterPenalty(b.gross, now - Number(b.maturityTs)) : b.gross);
+  const open = openSet.has(b.start);
+
+  const box = el("div", "batch" + (due ? (pct > 0 ? " late" : " due") : ""));
+  const head = el("button", "batch-head");
+  head.setAttribute("aria-expanded", String(open));
+  head.innerHTML = `
+    <span class="twist">${open ? "▼" : "▶"}</span>
+    <span>
+      <span class="when">${due ? (pct > 0 ? `${pct}% penalty` : "Claimable, no penalty") : fmtDur(Number(b.maturityTs) - now)}</span>
+      <span class="meta">${b.count === 1 ? "one mint" : `${b.count} mints opened together`} · ${b.count === 1 ? "#" + b.start : `#${b.start}–${b.start + b.count - 1}`} · ${Number(b.term)}-day term · rank ${Number(b.rankLo).toLocaleString()}${b.rankHi !== b.rankLo ? "–" + Number(b.rankHi).toLocaleString() : ""}${S.L.globalRank != null && S.L.globalRank > b.rankHi ? ` (+${Number(S.L.globalRank - b.rankHi).toLocaleString()} since)` : ""} · ${fmtDate(b.maturityTs)}</span>
+    </span>
+    <span class="amt">${fmtTok(net, S.K.decimals, S.K.symbol)}
+      <small>${due
+        ? (pct > 0 ? `claimable now, after ${pct}% penalty` : "claimable now — this is the exact amount")
+        : "at today's rank"}</small></span>`;
+  head.onclick = () => {
+    if (open) openSet.delete(b.start); else openSet.add(b.start);
+    if (readOnly) renderLookup(); else renderPositions();
+  };
+  box.appendChild(head);
+
+  if (open) {
+    const body = el("div", "batch-body");
+    b.items.forEach(p => body.appendChild(posCard(p, now, false)));
+    box.appendChild(body);
+  }
+  return box;
+}
+
+function renderPositions() {
+  const host = $("#posList"), runsHost = $("#posRuns");
+  const rb = $("#rankBasis");
+  if (rb) {
+    rb.innerHTML = `A matured mint shows its exact payout — the contract reads the global rank at the moment you claim. One still running shows what it would pay at today's rank; that figure moves as the rank climbs.`;
+  }
+  if (!S.account) { host.innerHTML = `<div class="empty">Connect a wallet to load your mints.</div>`; runsHost.innerHTML = ""; return; }
+  if (!S.positions.length && !S.soloMint) {
+    host.innerHTML = `<div class="empty">No open mints. Open one from the mint tab.</div>`;
+    runsHost.innerHTML = ""; return;
+  }
+  const now = chainNow();
+  const onlyClaimable = $("#onlyClaimable").checked;
+  host.innerHTML = "";
+
+  if (S.soloMint && (!onlyClaimable || Number(S.soloMint.maturityTs) <= now)) {
+    host.appendChild(posCard(S.soloMint, now, true));
+  }
+
+  const batches = groupBatches(S.positions);
+  const shown = batches.filter(b => !onlyClaimable || Number(b.maturityTs) <= now);
+  shown.forEach(b => host.appendChild(batchCard(b, now)));
+
+  if (!host.children.length) {
+    host.innerHTML = `<div class="empty">Nothing is claimable yet. Untick the filter to see everything.</div>`;
+  }
+
+  // Adjacent batches sit on contiguous indexes, so several can go in one claim.
+  // Only worth offering when it actually saves a transaction.
+  const claimable = batches.filter(b => Number(b.maturityTs) <= now).sort((a, b) => a.start - b.start);
+  const runs = [];
+  claimable.forEach(b => {
+    const last = runs[runs.length - 1];
+    if (last && b.start === last.start + last.count) { last.count += b.count; last.batches++; }
+    else runs.push({ start: b.start, count: b.count, batches: 1 });
+  });
+  if (!runs.length) { runsHost.innerHTML = ""; return; }
+
+  const merged = runs.some(r => r.batches > 1);
+  runsHost.innerHTML = `<hr><h3 style="font-size:11px;margin:0 0 8px">Claim and reopen</h3>
+    <p class="note" style="color:var(--muted);font-size:13px;margin:0 0 10px">
+      ${runs.length === 1
+        ? (merged ? "Everything claimable sits on neighbouring indexes, so one transaction covers it all."
+                  : "One transaction covers this.")
+        : `Your claimable mints fall into ${runs.length} runs of neighbouring indexes, so this takes ${runs.length} transactions.`}</p>`;
+  runs.forEach((run, n) => {
+    const box = el("div", "run");
+    box.innerHTML = `<div><strong>${run.batches === 1 ? "1 batch" : run.batches + " batches"} · ${run.count.toLocaleString()} mint${run.count === 1 ? "" : "s"}</strong> · indexes ${run.start}–${run.start + run.count - 1}
+        <div class="addr" id="runFee${n}">quoting…</div></div>`;
+    const bar = el("div", "row"); bar.style.marginTop = "10px";
+    const b = el("button", "btn primary", "Claim and reopen");
+    b.onclick = () => doClaimRemint(run);
+    bar.appendChild(b);
+    box.appendChild(bar);
+    runsHost.appendChild(box);
+    quoteRun(run, n);
+  });
+}
+
+async function quoteRun(run, n) {
+  if (!S.gasPrice) return;
+  const r = await mc([
+    { to: A.batchMinter, iface: I.batch, fn: "batchClaimFee", args: [BigInt(run.count), S.gasPrice] },
+    { to: A.batchMinter, iface: I.batch, fn: "batchFee", args: [BigInt(run.count), S.gasPrice] }
+  ]);
+  const node = $(`#runFee${n}`);
+  if (!node) return;
+  node.textContent = (r[0] != null && r[1] != null)
+    ? `fee ${fmtEth(r[0] + r[1])}${usdSuffix(r[0] + r[1])} at current gas — claim plus the new mint`
+    : "fee unavailable";
+}
+
+function posCard(p, now, solo) {
+  const due = Number(p.maturityTs) <= now;
+  const late = now - Number(p.maturityTs);
+  const pct = due ? penaltyPct(late) : 0;
+  const card = el("div", "pos" + (due ? (pct > 0 ? " late" : " due") : ""));
+  const net = (p.gross != null && due) ? netAfterPenalty(p.gross, late) : p.gross;
+
+  card.innerHTML = `
+    <div class="idx">${solo ? "solo" : "#" + p.index}</div>
+    <div>
+      <div class="when">${due ? (pct > 0 ? `${pct}% penalty` : "Claimable, no penalty") : fmtDur(Number(p.maturityTs) - now)}</div>
+      <div class="meta">${fmtDate(p.maturityTs)} · ${Number(p.term)}-day term · rank ${Number(p.rank).toLocaleString()}${p.rankDelta != null ? ` · delta ${Number(p.rankDelta).toLocaleString()}` : ""}
+        ${solo ? `<span class="pill">minted directly</span>` : ""}
+        ${due && pct > 0 ? `<span class="pill bad">losing value</span>` : ""}
+      </div>
+    </div>
+    <div class="amt">${fmtTok(net, S.K.decimals, S.K.symbol)}
+      <small>${due
+        ? (pct > 0 ? `exact, after ${pct}% penalty` : "exact if claimed now")
+        : "at today's rank"}</small>
+    </div>`;
+  return card;
+}
+
+function renderStake() {
+  const L = S.L;
+  const apyNow = L.apy != null ? Number(L.apy) + "%" : "—";
+  $("#stakeApy").textContent = apyNow;
+
+  const box = $("#stakeExisting");
+  if (S.stake) {
+    const now = chainNow();
+    const mature = Number(S.stake.maturityTs) <= now;
+    const reward = S.K.DAYS_IN_YEAR
+      ? S.stake.amount * S.stake.apy * S.stake.term / (100n * S.K.DAYS_IN_YEAR)
+      : null;
+    box.innerHTML = `
+      <div class="quote" style="border-left-color:${mature ? "var(--safe)" : "var(--rule)"}">
+        <div class="line"><span>Staked</span><strong>${fmtTok(S.stake.amount, S.K.decimals, S.K.symbol)}</strong></div>
+        <div class="line"><span>Rate locked in</span><strong>${Number(S.stake.apy)}%</strong></div>
+        <div class="line"><span>Term</span><strong>${Number(S.stake.term)} days</strong></div>
+        <div class="line"><span>${mature ? "Matured" : "Matures"}</span><strong>${fmtDate(S.stake.maturityTs)}</strong></div>
+        <div class="line"><span>Reward at maturity</span><strong>${fmtTok(reward, S.K.decimals, S.K.symbol)}</strong></div>
+      </div>
+      <button class="btn ${mature ? "primary" : ""}" id="btnWithdraw" style="width:100%">
+        ${mature ? "Withdraw stake and reward" : "Withdraw early (forfeits part of the reward)"}
+      </button>
+      <p class="note" style="margin-top:10px">You already have a stake. Staking again would replace it, so the form is closed until this one is withdrawn.</p>`;
+    $("#stakeForm").style.display = "none";
+    $("#btnWithdraw").onclick = doWithdraw;
+  } else {
+    box.innerHTML = "";
+    $("#stakeForm").style.display = "";
+    $("#btnStake").disabled = !S.account;
+    $("#btnStake").textContent = S.account ? "Stake" : "Connect wallet to stake";
+    const sr = $("#stakeTermRange");
+    if (sr) sr.textContent = `· ${minTermDays()} to ${maxStakeTermDays()}`;
+    projectStake();
+  }
+}
+
+function projectStake() {
+  const amt = parseFloat($("#stakeAmt")?.value || "0");
+  const term = parseInt($("#stakeTerm")?.value || "0", 10);
+  const apy = S.L.apy != null ? Number(S.L.apy) : null;
+  const diy = S.K.DAYS_IN_YEAR != null ? Number(S.K.DAYS_IN_YEAR) : 365;
+  if (!amt || !term || apy == null) { const n = $("#stakeProj"); if (n) n.textContent = "—"; return; }
+  const r = amt * apy * term / (100 * diy);
+  const n = $("#stakeProj");
+  if (n) n.textContent = r.toLocaleString(undefined, { maximumFractionDigits: 4 }) + " " + S.K.symbol;
+}
+
+function renderBurns() {
+  for (const key of ["fuel", "more"]) {
+    const b = S.burners[key];
+    const host = $(key === "fuel" ? "#fuelBurnBody" : "#moreBurnBody");
+    if (!b) { host.innerHTML = `<div class="empty">Not loaded.</div>`; continue; }
+    const now = chainNow();
+    const start = Number(b.start ?? 0);
+    const slot = b.slot || 600;
+    const cur = start > 0 && now >= start ? Math.floor((now - start) / slot) : null;
+    const nextAt = cur != null ? start + (cur + 1) * slot : null;
+    const spent = cur != null && Number(b.lastInterval ?? -1) >= cur;
+
+    host.innerHTML =
+      statRow("Waiting in the pool", fmtEth(b.bal)) +
+      statRow(`Total ${b.sym} removed from supply`, fmtTok(b.burnt, b.dec, b.sym)) +
+      statRow("ETH spent so far", fmtEth(b.ethUsed)) +
+      statRow("Released per day", b.daily != null ? (Number(b.daily) / 100).toFixed(2) + "% of the pool" : "—", true) +
+      statRow("Slippage the owner has set", b.slippage != null ? Number(b.slippage) + "%" : "—", true) +
+      statRow("Slot length", `${Math.round(slot / 60)} min${b.slotDerived ? " (assumed — no burns yet to measure)" : ""}`, true) +
+      statRow("ETH ready to deploy this slot",
+              b.ready != null ? fmtEth(b.ready) + usdSuffix(b.ready) : "—") +
+      statRow("Your cut for calling it",
+              b.ready != null && b.ready > 0n
+                ? `${fmtEth(b.ready * CALLER_REWARD_BPS / 10000n)}${usdSuffix(b.ready * CALLER_REWARD_BPS / 10000n)} · 1.5%`
+                : "1.5% of the slot", true) +
+      statRow(spent ? "This slot is done, next opens" : "Open now, this slot ends",
+              nextAt ? fmtDur(nextAt - now) : "—", true);
+
+    const btn = el("button", "btn " + (spent ? "" : "primary"), spent ? "Slot already burned" : `Buy and burn ${b.sym}`);
+    btn.style.width = "100%"; btn.style.marginTop = "12px";
+    btn.disabled = !S.account || spent || start === 0;
+    btn.onclick = () => doBurn(key);
+    host.appendChild(btn);
+
+    const note = el("p", "note");
+    note.style.marginTop = "10px";
+    note.innerHTML = `Bought ${b.sym} is ${b.dest}. Whoever presses this cannot set the slippage — it is fixed by the contract's owner, currently ${b.slippage != null ? Number(b.slippage) + "%" : "unknown"}. <span class="derived">The 1.5% caller's cut is from the protocol's documentation — no contract exposes it, so it cannot be verified here.</span>`;
+    host.appendChild(note);
+  }
+}
+
+function renderVault() {
+  const L = S.L, host = $("#vaultBody");
+  const started = L.vaultGenesis != null && L.vaultGenesis > 0n;
+  if (!started) {
+    host.innerHTML = `<div class="empty">The cycle clock has not started. It begins with the protocol's first mint.</div>`;
+    return;
+  }
+  const now = chainNow();
+  const end = Number(L.cycleEnd ?? 0);
+  const len = Number(S.K.CYCLE_LENGTH ?? 0);
+  const done = end > 0 && now >= end;
+  const pct = len > 0 && end > 0 ? Math.min(100, Math.max(0, (1 - (end - now) / len) * 100)) : 0;
+
+  host.innerHTML =
+    statRow("Sitting in the fund", fmtEth(L.balVault)) +
+    statRow("Cycle", L.cycle != null ? "#" + Number(L.cycle) : "—") +
+    statRow(done ? "Cycle finished" : "Cycle ends", done ? fmtDate(end) : fmtDur(end - now)) +
+    statRow("Cycle length", len ? Math.round(len / 86400) + " days" : "—", true) +
+    statRow("Swept across all cycles", fmtEth(L.totalSwept), true) +
+    statRow("Caller's cut of a sweep",
+      S.K.SWEEP_BPS != null && S.K.V_BPS_DEN ? (Number(S.K.SWEEP_BPS) / Number(S.K.V_BPS_DEN) * 100).toFixed(2) + "%" : "—", true) +
+    `<div style="height:6px;background:var(--bg);border:1px solid var(--line);margin:14px 0 4px;overflow:hidden">
+       <div style="height:100%;width:${pct.toFixed(1)}%;background:var(--signal)"></div></div>
+     <div class="addr" style="font-size:12px">${pct.toFixed(1)}% through this cycle</div>`;
+
+  const btn = el("button", "btn " + (done ? "primary" : ""), done ? "Sweep to the FUEL burner" : "Sweep (cycle not finished)");
+  btn.style.width = "100%"; btn.style.marginTop = "12px";
+  btn.disabled = !S.account || !done;
+  btn.onclick = doSweep;
+  host.appendChild(btn);
+}
+
+function renderFees() {
+  const L = S.L, host = $("#feeBody");
+  const den = S.K.FD_BPS_DEN ? Number(S.K.FD_BPS_DEN) : 10000;
+  const p = v => v != null ? (Number(v) / den * 100).toFixed(1) + "%" : "—";
+  const bal = L.balFeeDist ?? 0n;
+  const min = S.K.MIN_DISTRIBUTE ?? 0n;
+  const ready = bal >= min && min > 0n;
+
+  host.innerHTML =
+    statRow("Waiting to be split", fmtEth(bal)) +
+    statRow("Split so far", fmtEth(L.totalDistributed)) +
+    `<div class="stat"><div class="k">Where it goes</div><div class="v small">
+       ${p(S.K.VAULT_BPS)} pump fund · ${p(S.K.BURN_BPS)} FUEL burn · ${p(S.K.MORE_BPS)} MORE burn</div></div>` +
+    statRow("Threshold to trigger", fmtEth(min), true);
+
+  const btn = el("button", "btn", ready ? "Distribute fees" : `Needs ${fmtEth(min > bal ? min - bal : 0n)} more`);
+  btn.style.width = "100%"; btn.style.marginTop = "12px";
+  btn.disabled = !S.account || !ready;
+  btn.onclick = doDistribute;
+  host.appendChild(btn);
+
+  const note = el("p", "note");
+  note.style.marginTop = "10px";
+  note.textContent = "This pays no reward. You spend gas and get nothing back — it only moves fees to where they are meant to go.";
+  host.appendChild(note);
+}
+
+/* ======================= stats ======================= */
+const STATS = { busy: false, abort: false, series: null };
+
+/* pct null means indeterminate — we know it is working, not how far along */
+function renderProgress(host, pct) {
+  if (!host) return;
+  const busy = pct == null;
+  const slim = host.id === "globalBar";
+  host.hidden = false;
+  host.className = "progress" + (slim ? " slim" : "") + (busy ? " busy" : "");
+  if (!host.firstElementChild) host.innerHTML = `<div class="fill"></div><div class="pct"></div>`;
+  const v = busy ? null : Math.min(100, Math.max(0, Math.round(pct)));
+  host.firstElementChild.style.width = busy ? "100%" : v + "%";
+  host.lastElementChild.textContent = busy ? "" : v + "%";
+}
+function hideProgress(host) {
+  if (!host) return;
+  host.hidden = true;
+  host.className = host.id === "globalBar" ? "progress slim" : "progress";
+}
+
+/* One thin bar under the masthead for anything the user is waiting on. Reference
+   counted, because several of these overlap — connecting kicks off a position
+   load, which kicks off projections. The 45-second background refresh is left out
+   on purpose: a bar that blinks every 45 seconds stops meaning anything. */
+let BUSY = 0;
+function setBusy(delta) {
+  BUSY = Math.max(0, BUSY + delta);
+  const bar = $("#globalBar");
+  if (!bar) return;
+  if (BUSY > 0) renderProgress(bar, null);
+  else hideProgress(bar);
+}
+async function busy(fn) {
+  setBusy(1);
+  try { return await fn(); } finally { setBusy(-1); }
+}
+
+function statsSay(msg, cls) { const n = $("#statsMsg"); if (n) { n.textContent = msg; n.className = cls || "derived"; } }
+
+/* Find the block nearest a timestamp. Searching by time sidesteps needing to know
+   this chain's block cadence, which sources disagree about by orders of magnitude. */
+async function blockAtTime(targetTs) {
+  const latest = await rpcRetry(p => p.getBlock("latest"));
+  if (targetTs >= Number(latest.timestamp)) return latest.number;
+  let lo = 0, hi = latest.number;
+  try {                                   // seed from measured cadence to cut the search
+    const back = Math.max(0, latest.number - 20000);
+    const probe = await rpcRetry(p => p.getBlock(back));
+    const per = (Number(latest.timestamp) - Number(probe.timestamp)) / Math.max(1, latest.number - probe.number);
+    if (per > 0) {
+      const guess = Math.floor(latest.number - (Number(latest.timestamp) - targetTs) / per);
+      lo = Math.max(0, guess - 50000);
+      hi = Math.min(latest.number, Math.max(lo + 1, guess + 50000));
+      const edge = await rpcRetry(p => p.getBlock(lo));
+      if (!edge || Number(edge.timestamp) > targetTs) lo = 0;
+    }
+  } catch (_) {}
+  for (let i = 0; i < 16 && lo < hi; i++) {
+    const mid = Math.floor((lo + hi) / 2);
+    const b = await rpcRetry(p => p.getBlock(mid));
+    if (!b) break;
+    if (Number(b.timestamp) < targetTs) lo = mid + 1; else hi = mid;
+  }
+  return lo;
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* A dropped request should not end a five-minute load. "Failed to fetch" is what
+   a browser reports for a connection that never completed — a rate limit closing
+   the socket, a blip, a proxy — and retrying it usually works. */
+function isTransient(e) {
+  const m = (e?.shortMessage || e?.message || String(e)).toLowerCase();
+  return /failed to fetch|networkerror|network error|load failed|rate|limit|429|too many|timeout|timed out|503|502|504|econn|socket/.test(m);
+}
+/* A pool of endpoints, used round robin. An endpoint that fails transiently is
+   benched briefly rather than retried immediately — the whole point is to send the
+   next attempt somewhere else. */
+let rrIndex = 0;
+function pickEndpoint() {
+  const now = Date.now();
+  const healthy = S.pool.filter(e => e.ok && e.benchedUntil <= now);
+  const list = healthy.length ? healthy : S.pool.filter(e => e.ok);
+  const pool = list.length ? list : S.pool;
+  return pool[rrIndex++ % pool.length];
+}
+
+async function rpcRetry(fn, tries = 5) {
+  let last;
+  for (let i = 0; i < tries; i++) {
+    const entry = pickEndpoint();
+    try {
+      const out = await fn(entry.provider);
+      entry.benchedUntil = 0;
+      return out;
+    } catch (e) {
+      last = e;
+      if (!isTransient(e)) throw e;
+      entry.benchedUntil = Date.now() + 6000;
+      if (i === tries - 1) throw e;
+      await sleep(200 * (i + 1));
+    }
+  }
+  throw last;
+}
+
+/* One scan for every event we need, across all contracts at once.
+   Walks backwards from the newest block, because the reconstruction anchors on
+   today's figures: if the scan gives out partway, what we have is still a correct
+   series for the recent window rather than a useless one for the distant past.
+   Chunk size adapts on range errors; rate limits and timeouts get a backoff and a
+   retry of the same range, since shrinking it would not have helped. */
+async function scanLogs(fromBlock, toBlock, addresses, topicsFilter, onProgress) {
+  const out = [];
+  const total = toBlock - fromBlock + 1;
+  let span = 600000, hi = toBlock, fails = 0, entry = null;
+
+  while (hi >= fromBlock) {
+    const lo = Math.max(fromBlock, hi - span + 1);
+    try {
+      entry = pickEndpoint();
+      const logs = await entry.provider.getLogs({ address: addresses, topics: topicsFilter, fromBlock: lo, toBlock: hi });
+      out.push(...logs);
+      hi = lo - 1;
+      fails = 0;
+      span = Math.min(1200000, Math.floor(span * 1.5));
+      onProgress?.(toBlock - hi, total, out.length);
+      await sleep(40);
+    } catch (e) {
+      fails++;
+      if (isTransient(e)) {
+        // bench the endpoint that just failed so the retry lands on another one
+        if (entry) entry.benchedUntil = Date.now() + 6000;
+        if (fails > 14) return { logs: out, coveredFrom: hi + 1, complete: false, reason: e };
+        await sleep(Math.min(4000, 300 * fails));
+      } else if (span > 1000) {
+        span = Math.max(1000, Math.floor(span / 2));
+      } else {
+        return { logs: out, coveredFrom: hi + 1, complete: false, reason: e };
+      }
+    }
+  }
+  return { logs: out, coveredFrom: fromBlock, complete: true };
+}
+
+/* Blocks carry no timestamp in a log, and fetching one per log would be brutal.
+   Sample across the range and interpolate — well inside a 4h bucket. */
+async function buildTimeMap(fromBlock, toBlock) {
+  const pts = [];
+  const n = 8;
+  for (let i = 0; i <= n; i++) {
+    const bn = Math.round(fromBlock + (toBlock - fromBlock) * i / n);
+    let b = null;
+    try { b = await rpcRetry(p => p.getBlock(bn)); } catch (_) {}
+    if (b) pts.push([b.number, Number(b.timestamp)]);
+  }
+  pts.sort((a, b) => a[0] - b[0]);
+  return bn => {
+    if (!pts.length) return null;
+    if (bn <= pts[0][0]) return pts[0][1];
+    for (let i = 1; i < pts.length; i++) {
+      if (bn <= pts[i][0]) {
+        const [b0, t0] = pts[i - 1], [b1, t1] = pts[i];
+        return b1 === b0 ? t1 : t0 + (t1 - t0) * (bn - b0) / (b1 - b0);
+      }
+    }
+    return pts[pts.length - 1][1];
+  };
+}
+
+/* Turn whatever logs we have into series and draw them. Called after every pass,
+   so the charts extend backwards as coverage grows. */
+function buildSeries(logs, coveredFrom, ctx) {
+  const { now, start, bucketS, bucketH, tsOf, ev, complete } = ctx;
+
+  let effStart = start, short = null;
+  if (!complete) {
+    const covered = tsOf(coveredFrom);
+    if (covered != null && covered > start) {
+      effStart = Math.ceil(covered / bucketS) * bucketS;
+      short = Math.max(0, (now - effStart) / 86400);
+    }
+  }
+
+  const nbWanted = Math.max(2, Math.ceil((now - effStart) / bucketS));
+  const edges = [];
+  for (let k = nbWanted - 1; k >= 0; k--) edges.push(now - k * bucketS);
+  const nb = edges.length;
+  const idxOf = t => { for (let i = 0; i < nb; i++) if (t <= edges[i]) return i; return nb - 1; };
+
+  // Fee splits and sweeps move ETH between these four contracts without changing
+  // the sum, so the pooled total only moves when fees arrive, a burn spends, or a
+  // sweep pays its caller.
+  const pooled = new Array(nb).fill(0n);
+  const ranks = new Array(nb).fill(0);
+  const fuelBurnFlow = new Array(nb).fill(0n);
+  const moreByFuelFlow = new Array(nb).fill(0n);
+  const recent = [];
+
+  for (const lg of logs) {
+    const t = tsOf(lg.blockNumber);
+    if (t == null || t < edges[0] - bucketS) continue;
+    const i = idxOf(t), top = lg.topics[0];
+    try {
+      if (top === ev.feesRecv) {
+        pooled[i] += I.feeDist.parseLog(lg).args[1];
+      } else if (top === ev.received) {
+        const pl = I.vault.parseLog(lg);
+        if (pl.args[0]?.toLowerCase() !== A.feeDist.toLowerCase()) pooled[i] += pl.args[1];
+      } else if (top === ev.swept) {
+        pooled[i] -= I.vault.parseLog(lg).args[2];
+      } else if (top === ev.buyBurn) {
+        const pl = I.buyBurn.parseLog(lg);
+        pooled[i] -= pl.args[0];
+        fuelBurnFlow[i] += pl.args[1];
+      } else if (top === ev.moreBurn) {
+        const pl = I.moreBurner.parseLog(lg);
+        pooled[i] -= pl.args[0];
+        moreByFuelFlow[i] += pl.args[1];
+      } else if (top === ev.rank) {
+        ranks[i] += 1;
+      } else if (top === ev.opened || top === ev.reopened) {
+        const pl = I.batch.parseLog(lg);
+        recent.push({
+          block: lg.blockNumber, t, user: pl.args[0],
+          count: Number(pl.args[2]), term: Number(pl.args[3]),
+          fee: top === ev.opened ? pl.args[4] : null,
+          reopen: top === ev.reopened
+        });
+      }
+    } catch (_) {}
+  }
+
+  const backFrom = (current, deltas) => {
+    const v = new Array(nb).fill(0n);
+    let acc = current ?? 0n;
+    for (let i = nb - 1; i >= 0; i--) { v[i] = acc; acc = acc - deltas[i]; }
+    return v;
+  };
+
+  const currentTotal = [S.L.balFeeDist, S.L.balVault, S.L.balBuyBurn, S.L.balMoreBurner]
+    .reduce((a, v) => a + (v ?? 0n), 0n);
+  const pooledSeries = backFrom(currentTotal, pooled);
+
+  const rankSeries = new Array(nb).fill(0);
+  let r = Number(S.L.globalRank ?? 0n);
+  for (let i = nb - 1; i >= 0; i--) { rankSeries[i] = r; r -= ranks[i]; }
+
+  recent.sort((a, b) => b.block - a.block);
+  recent.length = Math.min(recent.length, RECENT_PER_PAGE);
+
+  return {
+    edges, pooledSeries, rankSeries,
+    fuelBurnedSeries: backFrom(S.burners.fuel?.burnt, fuelBurnFlow),
+    moreByFuelSeries: backFrom(S.burners.more?.burnt, moreByFuelFlow),
+    negative: pooledSeries.some(v => v < 0n),
+    bucketH, days: ctx.days, events: logs.length, recent, short, complete
+  };
+}
+
+async function loadStats() {
+  if (STATS.busy) return;
+  STATS.busy = true;
+  STATS.abort = false;
+  const bar = $("#statsBar");
+  const rbtn = $("#btnStatsRefresh");
+  if (rbtn) { rbtn.disabled = true; rbtn.textContent = "Loading…"; }
+  try {
+    const sel = $("#statsRange") ? $("#statsRange").value : "all";
+    const now = chainNow();
+    const gen = Number(S.L.tokenGenesis ?? 0);
+    let start = sel === "all"
+      ? (gen > 0 ? gen : now - 30 * 86400)
+      : now - parseInt(sel, 10) * 86400;
+    // nothing existed before the token's genesis, so scanning past it is wasted budget
+    if (gen > 0 && start < gen) start = gen;
+    const days = Math.max(0.25, (now - start) / 86400);
+    const bucketH = days <= 2 ? 1 : days <= 7 ? 2 : 24;
+    const bucketS = bucketH * 3600;
+
+    renderProgress(bar, null);
+    statsSay("Locating the starting block…");
+    const fromBlock = await blockAtTime(start);
+    const toBlock = await rpcRetry(p => p.getBlockNumber());
+
+    const want = {
+      feesRecv: [I.feeDist, "FeesReceived"],
+      received: [I.vault, "Received"],
+      swept:    [I.vault, "Swept"],
+      buyBurn:  [I.buyBurn, "BuyAndBurn"],
+      moreBurn: [I.moreBurner, "MoreBoughtAndBurned"],
+      rank:     [I.token, "RankClaimed"],
+      opened:   [I.batch, "BatchRankClaimed"],
+      reopened: [I.batch, "BatchClaimedAndReminted"]
+    };
+    const ev = {}, absent = [];
+    for (const [key, [iface, name]] of Object.entries(want)) {
+      const frag = iface.getEvent(name);
+      if (!frag) { absent.push(name); continue; }
+      ev[key] = frag.topicHash;
+    }
+    if (absent.length) throw new Error("These event definitions are missing from the embedded ABIs: " + absent.join(", "));
+    const addresses = [A.feeDist, A.vault, A.buyBurn, A.moreBurner, A.token, A.batchMinter];
+    const topics = Object.values(ev);
+
+    statsSay("Mapping blocks to time…");
+    const tsOf = await buildTimeMap(fromBlock, toBlock);
+    const ctx = { now, start, bucketS, bucketH, days, tsOf, ev, complete: false };
+
+    // Resume rather than give up. A rate limit is temporary, so each pass picks up
+    // exactly where the last one stopped and the charts grow backwards as it goes.
+    const all = [];
+    let cursor = toBlock;
+    const totalBlocks = toBlock - fromBlock + 1;
+    let pass = 0;
+
+    while (cursor >= fromBlock && !STATS.abort) {
+      const res = await scanLogs(fromBlock, cursor, addresses, [topics], (done, _t, found) => {
+        const scanned = toBlock - cursor + done;
+        const pct = Math.min(100, Math.round(scanned / totalBlocks * 100));
+        renderProgress(bar, pct);
+        statsSay(`Scanning… ${pct}% · ${(all.length + found).toLocaleString()} events`);
+      });
+      all.push(...res.logs);
+      cursor = res.coveredFrom - 1;
+      ctx.complete = res.complete || cursor < fromBlock;
+
+      // draw what we have before waiting, so the page is useful while it continues
+      STATS.series = buildSeries(all, Math.max(fromBlock, cursor + 1), ctx);
+      renderStats();
+
+      if (ctx.complete) break;
+      pass++;
+      if (pass > 25) break;
+      const wait = Math.min(15, 3 + pass);
+      for (let k = wait; k > 0 && !STATS.abort; k--) {
+        statsSay(`Rate limited at ${Math.round((toBlock - cursor) / totalBlocks * 100)}% — resuming in ${k}s. Charts show what has loaded so far.`);
+        renderProgress(bar, null);
+        await sleep(1000);
+      }
+    }
+
+    const spanTxt = d => d < 1.5 ? Math.round(d * 24) + " hours" : d.toFixed(1) + " days";
+    const s2 = STATS.series;
+    statsSay((s2 && s2.complete
+        ? `Covering ${spanTxt(days)}${gen > 0 && start <= gen + bucketS ? " — the whole life of the protocol" : ""} at ${bucketH === 24 ? "1-day" : bucketH === 1 ? "hourly" : bucketH + "-hour"} intervals. `
+        : `Stopped at ${s2 && s2.short != null ? spanTxt(s2.short) : "a partial window"} of ${spanTxt(days)} — press Refresh to continue. `) +
+      `${all.length.toLocaleString()} events over ${(toBlock - Math.max(fromBlock, cursor + 1) + 1).toLocaleString()} blocks` +
+      (s2 && s2.negative ? " · the pooled line went below zero going backwards, so some ETH arrived by a route that emits no event — only the reconstructed past is affected, the latest point is read directly" : ""));
+
+  } catch (e) {
+    statsSay(isTransient(e)
+      ? "The RPC stopped responding — it rate limits, and a long scan can trip it. Press Refresh to pick up again, or choose a shorter window."
+      : "Could not load history: " + explain(e));
+  } finally {
+    STATS.busy = false;
+    hideProgress(bar);
+    if (rbtn) { rbtn.disabled = false; rbtn.textContent = "Refresh"; }
+  }
+}
+
+/* small line chart, no library, same palette as everything else */
+function svgLine(points, opts) {
+  const W = 660, H = 190, padL = 62, padR = 14, padT = 14, padB = 30;
+  const vals = points.map(p => p.v).filter(v => isFinite(v));
+  if (!vals.length) return `<div class="empty">No data.</div>`;
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  if (hi === lo) { hi = lo + (Math.abs(lo) || 1) * 0.1; lo = lo - (Math.abs(lo) || 1) * 0.1; }
+  else { const pad = (hi - lo) * 0.08; lo -= pad; hi += pad; }
+  if (opts.zeroFloor && lo > 0) lo = 0;
+  if (lo < 0 && Math.min(...vals) >= 0) lo = 0;   // never pad below zero for a quantity
+  const x = i => padL + (points.length === 1 ? 0 : i / (points.length - 1)) * (W - padL - padR);
+  const y = v => padT + (1 - (v - lo) / (hi - lo)) * (H - padT - padB);
+
+  const line = points.map((p, i) => `${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join(" ");
+  const area = `${padL},${(H - padB).toFixed(1)} ${line} ${x(points.length - 1).toFixed(1)},${(H - padB).toFixed(1)}`;
+  const grid = [0, .25, .5, .75, 1].map(f => {
+    const v = lo + (hi - lo) * (1 - f), yy = y(v);
+    return `<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${W - padR}" y2="${yy.toFixed(1)}" stroke="#35453b" stroke-dasharray="2 4"/>
+            <text x="${padL - 8}" y="${(yy + 4).toFixed(1)}" fill="#bcc7be" font-size="11" text-anchor="end" font-family="Courier New,monospace">${opts.fmt(v)}</text>`;
+  }).join("");
+  const firstT = points[0].t, lastT = points[points.length - 1].t;
+  const lbl = ts => new Date(ts * 1000).toLocaleString(undefined,
+    opts.bucketH >= 24 ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", hour: "2-digit" });
+
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img" aria-label="${opts.label}">
+    ${grid}
+    <polygon points="${area}" fill="${opts.color}" opacity="0.10"/>
+    <polyline points="${line}" fill="none" stroke="${opts.color}" stroke-width="1.8"/>
+    <circle cx="${x(points.length - 1).toFixed(1)}" cy="${y(points[points.length - 1].v).toFixed(1)}" r="3.5" fill="${opts.color}"/>
+    <text x="${padL}" y="${H - 8}" fill="#bcc7be" font-size="11" font-family="Courier New,monospace">${lbl(firstT)}</text>
+    <text x="${W - padR}" y="${H - 8}" fill="#bcc7be" font-size="11" text-anchor="end" font-family="Courier New,monospace">${lbl(lastT)}</text>
+  </svg>`;
+}
+
+function renderStats() {
+  const host = $("#statsCharts");
+  if (!host) return;
+  const s = STATS.series;
+  if (!s) { host.innerHTML = ""; return; }
+
+  const toEth = v => Number(E.formatEther(v < 0n ? 0n : v));
+  const tok = (v, dec) => Number(E.formatUnits(v < 0n ? 0n : v, dec ?? 18));
+  const compact = v => {
+    if (v >= 1e9) return (v / 1e9).toFixed(2) + "B";
+    if (v >= 1e6) return (v / 1e6).toFixed(2) + "M";
+    if (v >= 1e3) return (v / 1e3).toFixed(1) + "K";
+    return v.toFixed(0);
+  };
+  const pts = (arr, conv) => s.edges.map((t, i) => ({ t, v: conv(arr[i]) }));
+  const mSym = S.L.moreSymbol || "MORE", mDec = S.L.moreDecimals ?? 18;
+
+  const pctOf = (part, whole) => {
+    if (part == null || whole == null || whole <= 0n) return null;
+    const v = Number(part * 1000000n / whole) / 10000;
+    return isFinite(v) ? (v >= 1 ? v.toFixed(2) : v.toPrecision(2)) + "%" : null;
+  };
+  // FUEL is genuinely destroyed, so its supply has already shrunk by what was
+  // burned — the honest denominator is everything ever minted.
+  const fuelBurnt = S.burners.fuel?.burnt;
+  const fuelEverMinted = (S.L.totalSupply != null && fuelBurnt != null) ? S.L.totalSupply + fuelBurnt : null;
+  const fuelPct = pctOf(fuelBurnt, fuelEverMinted);
+  // MORE is sent to a dead address rather than destroyed, so its supply is unchanged.
+  const morePct = pctOf(S.burners.more?.burnt, S.L.moreSupply);
+
+  const charts = [
+    { title: "Pooled in burn contracts and the fund",
+      sub: "Both burn pools, the pump fund, and fees not yet split, as one figure. It rises as mint fees arrive and falls as burns spend it.",
+      p: pts(s.pooledSeries, toEth), color: "#96c99c",
+      fmt: v => v >= 1 ? v.toFixed(3) : v.toFixed(4), zeroFloor: false },
+    { title: "Global rank",
+      sub: "One step per mint opened, across every wallet. This is what drives the reward on every position.",
+      p: pts(s.rankSeries, v => Number(v)), color: "#eedc93",
+      fmt: v => Math.round(v).toLocaleString(), zeroFloor: false },
+    { title: `${S.K.symbol} burned`,
+      sub: `Cumulative ${S.K.symbol} bought back and destroyed by the protocol.` +
+           (fuelPct ? ` <strong>${fuelPct}</strong> of every ${S.K.symbol} ever minted has been burned.` : ""),
+      p: pts(s.fuelBurnedSeries, v => tok(v, S.K.decimals)), color: "#b2e5ba",
+      fmt: compact, zeroFloor: false },
+    { title: `${mSym} burned by this protocol`,
+      sub: `Cumulative ${mSym} bought with ${S.K.symbol} mint fees and sent to the dead address.` +
+           (morePct ? ` That is <strong>${morePct}</strong> of the ${mSym} supply, which is unchanged because the tokens are parked rather than destroyed.` : ""),
+      p: pts(s.moreByFuelSeries, v => tok(v, mDec)), color: "#e0b358",
+      fmt: compact, zeroFloor: false }
+  ];
+
+  host.innerHTML = charts.map(c => `
+    <div class="panel">
+      <h3>${c.title}</h3>
+      <p class="note">${c.sub}</p>
+      ${svgLine(c.p, { fmt: c.fmt, color: c.color, label: c.title, bucketH: s.bucketH, zeroFloor: c.zeroFloor })}
+    </div>`).join("") + `<div id="recentHost"></div>`;
+  renderRecent();
+}
+
+const RECENT_PER_PAGE = 20;
+
+function renderRecent() {
+  const host = $("#recentHost");
+  if (!host) return;
+  const s = STATS.series;
+  const all = (s && s.recent) || [];
+
+  if (!all.length) {
+    host.innerHTML = `<div class="panel"><h3>Recent mints</h3>
+      <p class="note">Nothing opened in the window scanned.</p></div>`;
+    return;
+  }
+
+  const rows = all.slice(0, RECENT_PER_PAGE);
+
+  const now = chainNow();
+  const body = rows.map(r => {
+    const ago = r.t != null ? fmtDur(now - Math.round(r.t)) : "—";
+    return `<div class="pos">
+      <div class="idx">${r.reopen ? "↻" : "+"}</div>
+      <div>
+        <div class="when">${r.count.toLocaleString()} mint${r.count === 1 ? "" : "s"}${r.reopen ? " reopened" : ""}</div>
+        <div class="meta">${link(r.user)} · ${r.term}-day term · ${ago}</div>
+      </div>
+      <div class="amt">${r.fee != null ? fmtEth(r.fee) + usdSuffix(r.fee) : "—"}
+        <small>${r.fee != null ? "fee paid" : "reopened"}</small></div>
+    </div>`;
+  }).join("");
+
+  host.innerHTML = `<div class="panel"><h3>Recent mints</h3>
+    <p class="note">The twenty most recent openings and reopenings across the protocol. Fees are what was actually paid, not an estimate.</p>
+    ${body}
+  </div>`;
+}
+
+
+/* ======================= actions ======================= */
+
+/* ======================= wallet stats ======================= */
+/* FUEL priced from the pair, with the burn contract's oracle as a backstop. */
+async function fuelPerEth() {
+  if (S.L.fuelPerEth && S.L.fuelPerEth > 0n) return S.L.fuelPerEth;
+  const r = await mc([
+    { to: A.pool, iface: I.pool, fn: "slot0" },
+    { to: A.buyBurn, iface: I.buyBurn, fn: "getTokenQuoteForETH", args: [10n ** 18n] }
+  ]);
+  return priceFromSlot0(r[0] ? r[0][0] : null) ?? (r[1] && r[1] > 0n ? r[1] : null);
+}
+
+let ETH_USD = null;
+async function fetchEthUsd() {
+  if (ETH_USD !== null) return ETH_USD;
+  try {
+    const r = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd", { cache: "no-store" });
+    const j = await r.json();
+    ETH_USD = Number(j?.ethereum?.usd) || null;
+    if (ETH_USD) { renderProtocolStats(); renderHeroStats(); renderRecent(); }
+  } catch (_) { ETH_USD = null; }
+  return ETH_USD;
+}
+
+async function renderWalletStats(sel, d) {
+  const host = $(sel);
+  if (!host) return;
+  if (!d) { host.innerHTML = ""; return; }
+
+  const now = chainNow();
+  const all = d.soloMint ? [...d.positions, d.soloMint] : d.positions;
+  const batches = groupBatches(d.positions);
+  const positionCount = batches.length + (d.soloMint ? 1 : 0);
+
+  const known = all.filter(p => p.gross != null);
+  const pending = known.reduce((a, p) => {
+    const late = now - Number(p.maturityTs);
+    return a + (late > 0 ? netAfterPenalty(p.gross, late) : p.gross);
+  }, 0n);
+
+  host.innerHTML = `<div class="grid2">
+    <div>${statRow("Active positions", positionCount.toLocaleString())}
+         ${statRow("FUEL pending", known.length ? fmtTok(pending, S.K.decimals, S.K.symbol) : "—")}
+         ${statRow("Estimated cost", `<span id="${sel.slice(1)}-cost">reading…</span>`, true)}</div>
+    <div>${statRow("Total mints held", all.length.toLocaleString())}
+         ${statRow("Value at today's price", `<span id="${sel.slice(1)}-val">reading…</span>`, true)}
+         ${statRow("Potential return", `<span id="${sel.slice(1)}-roi">—</span>`, true)}</div>
+  </div>
+  <div class="derived">Cost is what these mints would cost to open at the current gas price, not what was actually paid — the fee tracks gas, so it has moved since. Value uses the current price in the FUEL pair.</div>`;
+
+  const costNode = $(`#${sel.slice(1)}-cost`), valNode = $(`#${sel.slice(1)}-val`), roiNode = $(`#${sel.slice(1)}-roi`);
+
+  let cost = null;
+  try {
+    const gp = S.gasPrice || (await liveGas());
+    if (gp) {
+      const calls = batches.map(b => ({ to: A.batchMinter, iface: I.batch, fn: "batchFee", args: [BigInt(b.count), gp] }));
+      if (d.soloMint) calls.push({ to: A.token, iface: I.token, fn: "mintFee", args: [gp] });
+      const res = calls.length ? await mc(calls) : [];
+      if (res.length && res.every(v => v != null)) cost = res.reduce((a, v) => a + v, 0n);
+    }
+  } catch (_) {}
+  if (costNode) costNode.textContent = cost != null ? fmtEth(cost) : "unavailable";
+
+  let valueWei = null;
+  try {
+    const q = await fuelPerEth();
+    if (q && known.length) valueWei = pending * (10n ** 18n) / q;
+  } catch (_) {}
+  await fetchEthUsd();
+  if (valNode) valNode.innerHTML = valueWei != null ? fmtEth(valueWei) + usdSuffix(valueWei)
+    : `<span class="addr">no price available</span>`;
+
+  if (roiNode) {
+    if (valueWei != null && cost != null && cost > 0n) {
+      const pct = Number((valueWei - cost) * 10000n / cost) / 100;
+      roiNode.innerHTML = `<span style="color:${pct >= 0 ? "var(--green)" : "var(--red)"}">${pct >= 0 ? "+" : ""}${pct.toLocaleString(undefined, { maximumFractionDigits: 0 })}%</span>`;
+    } else roiNode.textContent = "—";
+  }
+}
+
+/* ======================= check any address ======================= */
+const openLookup = new Set();
+let LOOKUP = null;
+
+async function doLookup() {
+  const raw = $("#lookupAddr").value.trim();
+  const out = $("#lookupResult");
+  const btn = $("#btnLookup");
+  if (!raw) { out.innerHTML = `<div class="empty">Enter an address.</div>`; return; }
+  let addr;
+  try { addr = E.getAddress(raw); }
+  catch (_) { out.innerHTML = `<div class="empty">That is not a valid address.</div>`; return; }
+
+  btn.disabled = true; btn.textContent = "Reading…";
+  out.innerHTML = `<div class="progress" id="lookupBar"></div><div class="derived">Reading mints, stakes and projections…</div>`;
+  renderProgress($("#lookupBar"), null);
+  try {
+    openLookup.clear();
+    LOOKUP = await fetchMintsFor(addr);
+    renderLookup();
+  } catch (e) {
+    LOOKUP = null;
+    out.innerHTML = `<div class="empty">Could not read that address: ${explain(e)}</div>`;
+  } finally {
+    btn.disabled = false; btn.textContent = "Look up";
+  }
+}
+
+function renderLookup() {
+  const out = $("#lookupResult");
+  if (!out) return;
+  const d = LOOKUP;
+  if (!d) { out.innerHTML = ""; return; }
+  const now = chainNow();
+  out.innerHTML = "";
+
+  const isSelf = S.account && d.address.toLowerCase() === S.account.toLowerCase();
+  const all = d.soloMint ? [...d.positions, d.soloMint] : d.positions;
+  const dueCount = all.filter(p => Number(p.maturityTs) <= now).length;
+
+  const head = el("div");
+  head.innerHTML = `
+    <div class="stat"><div class="k">Address ${isSelf ? `<span class="pill safe">this is you</span>` : ""}</div>
+      <div class="v small">${link(d.address)}</div></div>
+    <div id="lookupStats"></div>
+    <div class="grid2" style="margin-top:2px">
+      <div>${statRow("Claimable now", dueCount.toLocaleString(), true)}</div>
+      <div>${statRow("Wallet balance", fmtTok(d.balance, S.K.decimals, S.K.symbol), true)}</div>
+    </div>
+    ${d.proxyCount > d.positions.length ? `<div class="derived">${(d.proxyCount - d.positions.length).toLocaleString()} mint ${d.proxyCount - d.positions.length === 1 ? "index has" : "indexes have"} already been claimed.</div>` : ""}`;
+  out.appendChild(head);
+  renderWalletStats("#lookupStats", all.length ? d : null).catch(() => {});
+
+  if (d.stake) {
+    const mature = Number(d.stake.maturityTs) <= now;
+    const box = el("div", "quote");
+    box.style.borderLeftColor = mature ? "var(--green)" : "var(--line)";
+    box.innerHTML = `
+      <div class="line"><span>Staked</span><strong>${fmtTok(d.stake.amount, S.K.decimals, S.K.symbol)}</strong></div>
+      <div class="line"><span>Rate locked in</span><strong>${Number(d.stake.apy)}%</strong></div>
+      <div class="line"><span>${mature ? "Matured" : "Matures"}</span><strong>${fmtDate(d.stake.maturityTs)}</strong></div>`;
+    out.appendChild(box);
+  }
+
+  if (!all.length) { out.appendChild(el("div", "empty", "No open mints for this address.")); return; }
+
+  const hr = el("hr"); out.appendChild(hr);
+  if (d.soloMint) out.appendChild(posCard(d.soloMint, now, true));
+  groupBatches(d.positions).forEach(b =>
+    out.appendChild(batchCard(b, now, { readOnly: true, openSet: openLookup })));
+}
+
+
+async function guard() {
+  if (!S.signer) { await connect(); }
+  if (!S.signer) throw new Error("No wallet connected.");
+  await ensureChain();
+  return S.signer;
+}
+async function liveGas() {
+  try { S.gasPrice = (await rpcRetry(p => p.getFeeData())).gasPrice ?? S.gasPrice; } catch (_) {}
+  return S.gasPrice;
+}
+function withBuffer(v) { return v + v * FEE_BUFFER_BPS / 10000n; }
+
+async function send(label, fn) {
+  setBusy(1);
+  try {
+    const tx = await fn();
+    toast(`${label} sent. Waiting for it to land.`);
+    const rec = await tx.wait();
+    toast(`${label} confirmed in block ${rec.blockNumber}.`, "ok");
+    await loadLive();
+    if (S.account) await loadUser();
+  } catch (e) {
+    toast(explain(e), "err");
+  } finally {
+    setBusy(-1);
+  }
+}
+
+async function doMint() {
+  const signer = await guard();
+  const count = BigInt(clampTerm($("#mintCount").value, 1, Number(S.K.MAX_BATCH ?? 50n)));
+  const minT = minTermDays(), maxT = maxMintTermDays();
+  const termDays = clampTerm($("#mintTermNum").value, minT, maxT);
+  if (String(termDays) !== String(parseInt($("#mintTermNum").value || "0", 10))) {
+    $("#mintTermNum").value = termDays; $("#mintTerm").value = termDays;
+    toast(`Term adjusted to ${termDays} days — the contract accepts ${minT} to ${maxT}.`);
+  }
+  const term = BigInt(termDays);
+  const start = BigInt(S.positions.length ? S.positions[S.positions.length - 1].index + 1 : 0);
+  const gp = await liveGas();
+  const c = new E.Contract(A.batchMinter, ABI.batchMinter, signer);
+  const fee = await c.batchFee(count, gp);
+  await send("Mint", () => c.batchClaimRank(start, count, term, { value: withBuffer(fee) }));
+}
+
+async function doClaimRemint(run) {
+  const signer = await guard();
+  const minT = minTermDays(), maxT = maxMintTermDays();
+  const raw = prompt(`New term in days (${minT} to ${maxT})`, String(maxT));
+  if (raw === null) return;
+  const parsed = parseInt(raw, 10);
+  if (!Number.isFinite(parsed)) { toast("That is not a number of days.", "err"); return; }
+  const term = clampTerm(parsed, minT, maxT);
+  if (term !== parsed) toast(`Term adjusted to ${term} days — the contract accepts ${minT} to ${maxT}.`);
+  const gp = await liveGas();
+  const c = new E.Contract(A.batchMinter, ABI.batchMinter, signer);
+  const claimFee = await c.batchClaimFee(BigInt(run.count), gp);
+  const mintFee = await c.batchFee(BigInt(run.count), gp);
+  await send("Claim and reopen", () =>
+    c.batchClaimAndRemint(BigInt(run.start), BigInt(run.count), BigInt(term), { value: withBuffer(claimFee + mintFee) }));
+}
+
+async function doStake() {
+  const signer = await guard();
+  const amt = E.parseUnits($("#stakeAmt").value || "0", S.K.decimals);
+  const minT = minTermDays(), maxT = maxStakeTermDays();
+  const termDays = clampTerm($("#stakeTerm").value, minT, maxT);
+  $("#stakeTerm").value = termDays;
+  const term = BigInt(termDays);
+  if (amt <= 0n) { toast("Enter an amount to stake.", "err"); return; }
+  if (S.K.MIN_STAKE != null && amt < S.K.MIN_STAKE) {
+    toast(`Minimum stake is ${fmtTok(S.K.MIN_STAKE, S.K.decimals, S.K.symbol)}.`, "err"); return;
+  }
+  const c = new E.Contract(A.token, ABI.token, signer);
+  await send("Stake", () => c.stake(amt, term));
+}
+
+async function doWithdraw() {
+  const signer = await guard();
+  const c = new E.Contract(A.token, ABI.token, signer);
+  await send("Withdraw", () => c.withdraw());
+}
+
+async function doBurn(key) {
+  const signer = await guard();
+  const b = S.burners[key];
+  const deadline = chainNow() + 300;
+  const c = new E.Contract(b.addr, key === "fuel" ? ABI.buyBurn : ABI.moreBurner, signer);
+  await send(`Burn ${b.sym}`, () => c[b.swapFn](deadline));
+}
+
+async function doSweep() {
+  const signer = await guard();
+  const c = new E.Contract(A.vault, ABI.vault, signer);
+  await send("Sweep", () => c.sweep());
+}
+
+async function doDistribute() {
+  const signer = await guard();
+  const c = new E.Contract(A.feeDist, ABI.feeDist, signer);
+  await send("Distribute", () => c.distribute());
+}
+
+/* ======================= wiring up the page ======================= */
+$$("nav.tabs button").forEach(b => b.onclick = () => {
+  $$("nav.tabs button").forEach(x => x.setAttribute("aria-selected", String(x === b)));
+  $$("section.tab").forEach(s => s.classList.toggle("on", s.id === "tab-" + b.dataset.tab));
+  if (b.dataset.tab === "stats" && !STATS.series && !STATS.busy) loadStats();
+});
+
+$("#btnConnect").onclick = connect;
+(() => {
+  const node = $("#donateAddr");
+  if (node) {
+    node.innerHTML = `${DONATE} <a href="${CHAIN.explorer}/address/${DONATE}" target="_blank" rel="noopener">explorer</a>`;
+  }
+})();
+
+$("#btnCopyDonate").onclick = async () => {
+  try {
+    await navigator.clipboard.writeText(DONATE);
+    toast("Address copied.", "ok");
+  } catch (_) {
+    // clipboard access is blocked on some setups, including plain file:// pages
+    const r = document.createRange();
+    r.selectNodeContents($("#donateAddr"));
+    const sel = getSelection();
+    sel.removeAllRanges();
+    sel.addRange(r);
+    toast("Couldn't reach the clipboard — the address is selected, press Ctrl+C.");
+  }
+};
+
+
+async function restartStats() {
+  if (STATS.busy) {                 // stop the resume loop, then start fresh
+    STATS.abort = true;
+    statsSay("Stopping…");
+    for (let i = 0; i < 40 && STATS.busy; i++) await sleep(150);
+  }
+  STATS.series = null;
+  renderStats();
+  loadStats();
+}
+$("#btnStatsRefresh").onclick = restartStats;
+$("#statsRange").onchange = restartStats;
+$("#btnLookup").onclick = doLookup;
+$("#lookupAddr").addEventListener("keydown", e => { if (e.key === "Enter") doLookup(); });
+$("#btnReload").onclick = () => loadUser().catch(e => toast(explain(e), "err"));
+$("#onlyClaimable").onchange = renderPositions;
+$("#btnMint").onclick = doMint;
+$("#btnStake").onclick = doStake;
+$("#btnMaxCount").onclick = () => { $("#mintCount").value = Number(S.K.MAX_BATCH ?? 50n); quoteMint(); };
+$("#btnStakeMax").onclick = () => { $("#stakeAmt").value = E.formatUnits(S.balance, S.K.decimals); projectStake(); };
+
+$("#mintTerm").oninput = e => { $("#mintTermNum").value = e.target.value; quoteMint(); };
+$("#mintTermNum").oninput = e => { $("#mintTerm").value = e.target.value; quoteMint(); };
+// clamp on change rather than on every keystroke, so typing "30" isn't fought at "3"
+$("#mintTermNum").onchange = e => {
+  const v = clampTerm(e.target.value, minTermDays(), maxMintTermDays());
+  e.target.value = v; $("#mintTerm").value = v; quoteMint();
+};
+$("#mintCount").onchange = e => {
+  e.target.value = clampTerm(e.target.value, 1, Number(S.K.MAX_BATCH ?? 50n));
+  quoteMint();
+};
+$("#stakeTerm").onchange = e => {
+  e.target.value = clampTerm(e.target.value, minTermDays(), maxStakeTermDays());
+  projectStake();
+};
+$("#mintCount").oninput = quoteMint;
+$("#stakeAmt").oninput = projectStake;
+$("#stakeTerm").oninput = projectStake;
+
+let lastTick = 0;
+function tick() {
+  renderClockChip();
+  renderProtocolDay();
+  renderHero();
+  // re-render the position list about every 10s so countdowns stay honest without thrashing
+  if (Date.now() - lastTick > 10000) { lastTick = Date.now(); if (S.account) renderPositions(); renderBurns(); renderVault(); }
+}
+
+// the tab icon reuses the mark already embedded in the masthead, rather than
+// pasting another 13KB of base64 into the head
+(() => {
+  const img = document.querySelector(".mark img");
+  if (!img || !img.src) return;
+  const l = document.createElement("link");
+  l.rel = "icon";
+  l.href = img.src;
+  document.head.appendChild(l);
+})();
+
+boot().catch(e => toast(explain(e), "err"));
+</script>
+</body>
+</html>
