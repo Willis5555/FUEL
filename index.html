@@ -203,6 +203,19 @@ input[type=range]{width:100%;accent-color:var(--accent-dim)}
 .chart-tip .part{display:block;margin-top:3px;color:var(--amber);font-size:11px}
 .chart-tip[hidden]{display:none}
 
+/* the wallets being read right now, each with its own progress */
+.inflight{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.inflight:empty{display:none}
+.inflight .w{
+  display:flex;align-items:center;gap:8px;flex:0 0 auto;
+  border:1px solid var(--line);padding:4px 10px;
+  font-family:var(--sans);font-size:12px;color:var(--text-dim);
+}
+.inflight .w .mono{font-size:11.5px;color:var(--text-dim)}
+.inflight .w .track{position:relative;width:74px;height:5px;background:#0d1310;border:1px solid var(--line)}
+.inflight .w .track i{display:block;height:100%;background:var(--accent-dim);transition:width .15s linear}
+.inflight .w .n{min-width:30px;text-align:right;font-variant-numeric:tabular-nums;color:var(--accent)}
+
 #toasts{position:fixed;right:20px;bottom:20px;z-index:100;display:flex;flex-direction:column;gap:9px;max-width:380px}
 .toast{border:1px solid var(--line);border-left:2px solid var(--accent-dim);background:var(--panel);padding:12px 15px;font-family:var(--sans);font-size:13px;line-height:1.5}
 .toast.err{border-left-color:var(--red)}
@@ -436,11 +449,12 @@ input[type=range]{width:100%;accent-color:var(--accent-dim)}
     <div class="panel">
       <h3>Top Minters</h3>
       <div class="row" style="align-items:flex-start">
-        <p class="note" style="flex:1">Every wallet holding open mints, ranked by what those mints would pay out. Figures are the same ones the positions tab shows — read per wallet, not estimated. This reads a great deal of chain state, so it only runs when you ask.</p>
+        <p class="note" style="flex:1">Every wallet holding open mints, ranked by what those mints would pay out. Figures are the same ones the positions tab shows — read per wallet, not estimated. Cost is the fee actually paid to open the mints still held, taken from the mint events, not a re-quote at today's gas; a star marks a wallet whose mints are not all covered by one. This reads a great deal of chain state, so it only runs when you ask.</p>
         <button class="btn sm fixed" id="btnTopLoad">Load list</button>
       </div>
       <div id="topBar" class="progress" hidden></div>
       <div id="topMsg" class="derived">Not loaded. Finding every holder means scanning the chain for mint events and then reading each wallet's positions, which takes a few minutes on the public RPCs.</div>
+      <div id="topInflight" class="inflight"></div>
       <div id="topList"></div>
     </div>
   </section>
@@ -635,26 +649,75 @@ function fmtEth(v, dp = 5, usd = true) {
 }
 /* Dollar value of an ETH amount, when a price is available. Bare, for somewhere
    that wants to place it itself; suffixed, for appending to a figure. */
-function usdPlain(wei) {
-  if (!ETH_USD || wei == null) return "";
-  const v = Number(E.formatEther(wei)) * ETH_USD;
+/* One dollar format for both tokens. Large values are compacted: these come from a
+   spot pair price, so quoting tens of millions to the dollar would claim a
+   precision the figure does not have. */
+function usdText(v) {
   if (!isFinite(v) || v <= 0) return "";
   if (v < 0.01) return "~<$0.01";
+  if (v >= 1e9) return `~$${(v / 1e9).toFixed(2)}B`;
+  if (v >= 1e6) return `~$${(v / 1e6).toFixed(2)}M`;
   return `~$${v.toLocaleString(undefined, { maximumFractionDigits: v < 100 ? 2 : 0 })}`;
+}
+function usdPlain(wei) {
+  if (!ETH_USD || wei == null) return "";
+  return usdText(Number(E.formatEther(wei)) * ETH_USD);
 }
 function usdSuffix(wei) {
   const s = usdPlain(wei);
   return s ? ` (${s})` : "";
 }
 
-function fmtTok(v, dec = 18, sym = "FUEL") {
+/* Dollars per whole FUEL. The pair prices FUEL against ETH and CoinGecko prices
+   ETH, so this needs both and is unavailable whenever either is missing. */
+function fuelUsdPrice() {
+  const per = S.L.fuelPerEth;
+  if (!ETH_USD || !per || per <= 0n) return null;
+  const perEth = Number(E.formatUnits(per, S.K.decimals ?? 18));
+  if (!(perEth > 0)) return null;
+  const v = ETH_USD / perEth;
+  return isFinite(v) && v > 0 ? v : null;
+}
+function fuelUsdPlain(amount) {
+  const p = fuelUsdPrice();
+  if (p == null || amount == null) return "";
+  return usdText(Number(E.formatUnits(amount, S.K.decimals ?? 18)) * p);
+}
+function fuelUsdSuffix(amount) {
+  const s = fuelUsdPlain(amount);
+  return s ? ` (${s})` : "";
+}
+
+/* What the mints cost to open, set against what they will pay out. Per single
+   FUEL this lands in millionths of a cent, so it is quoted against whichever
+   parcel — one, a thousand, a million — first puts it above a cent. */
+function costPerFuelLabel(spentWei, pendingFuel) {
+  if (!ETH_USD || spentWei == null || spentWei <= 0n || pendingFuel == null || pendingFuel <= 0n) return null;
+  const fuel = Number(E.formatUnits(pendingFuel, S.K.decimals ?? 18));
+  const usd = Number(E.formatEther(spentWei)) * ETH_USD;
+  if (!(fuel > 0) || !(usd > 0)) return null;
+  const perFuel = usd / fuel;
+  for (const [size, unit] of [[1, "FUEL"], [1e3, "1K FUEL"], [1e6, "1M FUEL"], [1e9, "1B FUEL"]]) {
+    const v = perFuel * size;
+    // fixed to the cent: these sit side by side down a column and are read against
+    // each other, which ragged decimals make harder than it needs to be
+    if (v >= 0.01) return `$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} per ${unit}`;
+  }
+  return null;
+}
+
+/* Carries a dollar value for the protocol's own token, the same way fmtEth does
+   for ETH. Other tokens are left bare — there is no pair here to price them. */
+function fmtTok(v, dec = 18, sym = "FUEL", usd = true) {
   if (v == null) return "—";
   const n = Number(E.formatUnits(v, dec));
   if (n === 0) return "0 " + sym;
-  if (n >= 1e9) return (n / 1e9).toFixed(2) + "B " + sym;
-  if (n >= 1e6) return (n / 1e6).toFixed(2) + "M " + sym;
-  if (n >= 1e3) return n.toLocaleString(undefined, { maximumFractionDigits: 0 }) + " " + sym;
-  return n.toLocaleString(undefined, { maximumFractionDigits: 4 }) + " " + sym;
+  const text =
+    n >= 1e9 ? (n / 1e9).toFixed(2) + "B " + sym :
+    n >= 1e6 ? (n / 1e6).toFixed(2) + "M " + sym :
+    n >= 1e3 ? n.toLocaleString(undefined, { maximumFractionDigits: 0 }) + " " + sym :
+               n.toLocaleString(undefined, { maximumFractionDigits: 4 }) + " " + sym;
+  return (usd && sym && sym === S.K.symbol) ? text + fuelUsdSuffix(v) : text;
 }
 function fmtDur(secs) {
   if (secs == null) return "—";
@@ -1242,11 +1305,15 @@ async function fetchMintsFor(u, barSel) {
     : null;
 
   // proxy addresses, then the mint stored under each
-  // three phases over the same set, so progress is thirds. The caller says which
-  // bar to drive — this runs for the connected wallet and for the address lookup.
-  const bar = barSel ? $(barSel) : null;
+  // three phases over the same set, so progress is thirds. The caller says where to
+  // report: a bar selector for the single-wallet screens, or a function for the
+  // leaderboard, which has several wallets in flight and tracks them itself.
+  const bar = typeof barSel === "string" ? $(barSel) : null;
+  const report = typeof barSel === "function" ? barSel : null;
   const phase = (n, base) => (done, total) => {
-    if (bar) renderProgress(bar, Math.round(base + (done / Math.max(1, total)) * 33));
+    const pct = Math.round(base + (done / Math.max(1, total)) * 33);
+    if (bar) renderProgress(bar, pct);
+    if (report) report(pct);
   };
 
   let proxies = [];
@@ -1433,8 +1500,8 @@ function headlineFigures() {
     .reduce((a, v) => a + (v ?? 0n), 0n);
   let price = K.poolOk === false ? "no pair" : "—";
   if (L.fuelPerEth && L.fuelPerEth > 0n) {
-    const per = Number(E.formatUnits(L.fuelPerEth, K.decimals ?? 18));
-    price = ETH_USD && per > 0 ? `$${(ETH_USD / per).toPrecision(2)}` : "awaiting price";
+    const p = fuelUsdPrice();
+    price = p ? `$${p.toPrecision(2)}` : "awaiting price";
   }
   return {
     pooled,
@@ -2033,13 +2100,19 @@ async function rpcRetry(fn, tries = 5) {
    series for the recent window rather than a useless one for the distant past.
    Chunk size adapts on range errors; rate limits and timeouts get a backoff and a
    retry of the same range, since shrinking it would not have helped. */
+/* How many logs to aim for per request. The official endpoint refuses anything
+   matching more than 10,000, and takes about ten seconds to say so, so the target
+   sits far enough below that a busy stretch of chain does not trip it. */
+const LOG_TARGET = 6000;
+
 async function scanLogs(fromBlock, toBlock, addresses, topicsFilter, onProgress) {
   const out = [];
   const total = toBlock - fromBlock + 1;
   // Ask for the whole window up front. One endpoint here answers a multi-million
   // block query in under a second; the old fixed 600k start paid for hundreds of
   // round trips it never needed, and any endpoint refusing a wide range used to
-  // shrink the span for all of them.
+  // shrink the span for all of them. A sparse scan finishes in a single request;
+  // a dense one is steered down to size by what comes back.
   let span = total, hi = toBlock, fails = 0, entry = null;
 
   while (hi >= fromBlock) {
@@ -2052,7 +2125,15 @@ async function scanLogs(fromBlock, toBlock, addresses, topicsFilter, onProgress)
       out.push(...logs);
       hi = lo - 1;
       fails = 0;
-      span = Math.min(total, Math.floor(span * 1.5));
+      // Steer the next span by what this one actually returned. Blind growth kept
+      // overshooting the result cap, and each overshoot costs a ten-second refusal.
+      if (logs.length > LOG_TARGET) {
+        span = Math.max(1000, Math.floor(attempted * LOG_TARGET / logs.length));
+      } else if (logs.length < LOG_TARGET / 3) {
+        span = Math.min(total, Math.floor(span * 2));
+      } else {
+        span = Math.min(total, Math.floor(span * 1.2));
+      }
       onProgress?.(toBlock - hi, total, out.length);
       await sleep(40);
     } catch (e) {
@@ -2062,7 +2143,11 @@ async function scanLogs(fromBlock, toBlock, addresses, topicsFilter, onProgress)
         if (entry) entry.benchedUntil = Date.now() + 6000;
         if (fails > 14) return { logs: out, coveredFrom: hi + 1, complete: false, reason: e };
         await sleep(Math.min(4000, 300 * fails));
-      } else if (rangeTooLarge(e)) {
+      } else if (resultLimitHit(e)) {
+        // too many logs in there, not too many blocks. Cut hard: this refusal is
+        // slow to arrive, so converging in one step beats halving repeatedly.
+        span = Math.max(1000, Math.floor(attempted / 8));
+      } else if (rangeTooWide(e)) {
         // this endpoint's ceiling, not everyone's — remember it and try elsewhere
         if (entry) entry.maxLogSpan = Math.max(1000, Math.floor(attempted / 2));
         const anyWider = S.pool.some(p => p.ok && !p.noLogs && (p.maxLogSpan ?? Infinity) >= attempted);
@@ -2077,11 +2162,22 @@ async function scanLogs(fromBlock, toBlock, addresses, topicsFilter, onProgress)
   return { logs: out, coveredFrom: fromBlock, complete: true };
 }
 
-/* An endpoint refusing a range for being too wide, as opposed to being busy. The
-   transient check runs first, so "rate limit" never reaches this. */
-function rangeTooLarge(e) {
+/* Two different refusals that look alike and need opposite responses. The
+   transient check runs first, so "rate limit" never reaches either.
+
+   A width cap is a property of the endpoint — it will never serve a range that
+   wide, so remember it and send wide queries elsewhere.
+
+   A result cap is a property of the data: the range is fine, it just holds more
+   logs than the endpoint will return at once. Nothing is learned about the
+   endpoint; the span simply has to suit how dense the logs are. */
+function rangeTooWide(e) {
   const m = (e?.shortMessage || e?.message || String(e)).toLowerCase();
-  return /too large|too many|exceed|more than|block range|ranges over|range is too/.test(m);
+  return /ranges over|block range|range is too|range too/.test(m);
+}
+function resultLimitHit(e) {
+  const m = (e?.shortMessage || e?.message || String(e)).toLowerCase();
+  return /logs matched|exceeds limit|more than \d+ results|query returned more than|too many results/.test(m);
 }
 
 /* Blocks carry no timestamp in a log, and fetching one per log would be brutal.
@@ -2592,10 +2688,25 @@ function renderRecent() {
    every wallet that has ever opened a mint; each of those is then read with the
    same function the positions tab uses, so the figures are identical by
    construction rather than by a second implementation agreeing with the first. */
-const TOP = { busy: false, abort: false, rows: null, scanned: 0, total: 0, complete: false };
+const TOP = { busy: false, abort: false, rows: null, scanned: 0, total: 0, complete: false, inflight: new Map() };
 const TOP_SHOWN = 25;
 
 function topSay(msg) { const n = $("#topMsg"); if (n) n.textContent = msg; }
+
+/* Several wallets are read at once and a large one takes a while, so each shows
+   its own progress — otherwise the shared bar sits still through the slowest. */
+function renderInflight() {
+  const host = $("#topInflight");
+  if (!host) return;
+  const live = [...TOP.inflight.entries()];
+  if (!live.length) { host.innerHTML = ""; return; }
+  host.innerHTML = live.map(([addr, p]) => `
+    <span class="w">
+      <span class="mono">${short(addr)}</span>
+      <span class="track"><i style="width:${Math.max(0, Math.min(100, p))}%"></i></span>
+      <span class="n">${Math.round(p)}%</span>
+    </span>`).join("");
+}
 
 async function loadTopHolders() {
   if (TOP.busy) return;
@@ -2620,6 +2731,10 @@ async function loadTopHolders() {
     /* Phase one: who has ever opened a mint. Resumes on rate limits the same way
        the charts do, so a long scan is interrupted rather than lost. */
     const owners = new Map();
+    // What each mint cost to open, keyed by its proxy index. BatchRankClaimed
+    // carries the fee that was actually paid, so this is the real figure rather
+    // than a re-quote at today's gas — and it comes free with a scan already running.
+    const feeByIndex = new Map();
     let cursor = toBlock, pass = 0;
     const totalBlocks = toBlock - fromBlock + 1;
     let scanComplete = false;
@@ -2634,7 +2749,18 @@ async function loadTopHolders() {
         try {
           const pl = I.batch.parseLog(lg);
           const u = pl.args[0];
-          if (u) owners.set(u.toLowerCase(), (owners.get(u.toLowerCase()) || 0) + Number(pl.args[2] || 0));
+          if (!u) continue;
+          const addr = u.toLowerCase();
+          const start = Number(pl.args[1] || 0), count = Number(pl.args[2] || 0);
+          owners.set(addr, (owners.get(addr) || 0) + count);
+          // only the opening event carries a fee; a remint has no fee argument
+          const fee = lg.topics[0] === opened.topicHash ? pl.args[4] : null;
+          if (fee != null && count > 0) {
+            let m = feeByIndex.get(addr);
+            if (!m) { m = new Map(); feeByIndex.set(addr, m); }
+            const per = fee / BigInt(count);
+            for (let k = 0; k < count; k++) m.set(start + k, per);
+          }
         } catch (_) {}
       }
       cursor = res.coveredFrom - 1;
@@ -2665,14 +2791,30 @@ async function loadTopHolders() {
     let done = 0, next = 0;
 
     const readOne = async (addr) => {
+      TOP.inflight.set(addr, 0);
+      renderInflight();
       try {
-        const d = await fetchMintsFor(addr);
+        const d = await fetchMintsFor(addr, pct => {
+          TOP.inflight.set(addr, pct);
+          renderInflight();
+        });
         const f = pendingFuel(d);
         if (f.all.length) {
+          // charge only the mints still open — fees for ones already claimed
+          // belong to a payout that has already happened
+          const feeMap = feeByIndex.get(addr);
+          let spent = 0n, priced = 0;
+          if (feeMap) {
+            for (const p of f.all) {
+              const per = p.index == null ? null : feeMap.get(p.index);
+              if (per != null) { spent += per; priced++; }
+            }
+          }
           rows.push({
             address: addr, pending: f.pending, mints: f.all.length,
             positions: f.positionCount, overdue: f.overdue, nextUnlock: f.nextUnlock,
             partial: !d.rankKnown,
+            spent, pricedMints: priced,
             // kept so a row can be opened up without reading the wallet again
             batches: groupBatches(d.positions), soloMint: d.soloMint
           });
@@ -2680,6 +2822,8 @@ async function loadTopHolders() {
       } catch (e) {
         if (!isTransient(e)) console.warn("[top] skipped " + addr, e);
       }
+      TOP.inflight.delete(addr);
+      renderInflight();
       done++;
       TOP.scanned = done;
       renderProgress(bar, 40 + Math.round(done / list.length * 60));
@@ -2718,6 +2862,8 @@ async function loadTopHolders() {
       : "Could not build the list: " + explain(e));
   } finally {
     TOP.busy = false;
+    TOP.inflight.clear();
+    renderInflight();
     hideProgress(bar);
     if (btn) { btn.disabled = false; btn.textContent = TOP.rows ? "Reload list" : "Load list"; }
   }
@@ -2745,6 +2891,9 @@ function renderTopHolders() {
     const when = r.overdue
       ? `${r.overdue} past unlock`
       : r.nextUnlock ? `unlocks in ${fmtDur(r.nextUnlock - now)}` : "—";
+    const cost = costPerFuelLabel(r.spent, r.pending);
+    // a wallet whose mints are not all covered by a fee event is flagged, not hidden
+    const costPartial = cost && r.pricedMints < r.mints;
 
     const box = el("div", "batch" + (r.overdue ? " late" : ""));
     const head = el("button", "batch-head");
@@ -2753,7 +2902,7 @@ function renderTopHolders() {
       <span class="twist">${open ? "▼" : "▶"}</span>
       <span>
         <span class="when">${i + 1}. <span class="mono">${short(r.address)}</span>${isMine ? ` <span class="pill safe">you</span>` : ""}</span>
-        <span class="meta">${r.mints.toLocaleString()} mint${r.mints === 1 ? "" : "s"} in ${r.positions.toLocaleString()} batch${r.positions === 1 ? "" : "es"} · ${when}${r.partial ? " · projection unavailable" : ""}</span>
+        <span class="meta">${r.mints.toLocaleString()} mint${r.mints === 1 ? "" : "s"} in ${r.positions.toLocaleString()} batch${r.positions === 1 ? "" : "es"} · ${when}${cost ? ` · cost ${cost}${costPartial ? "*" : ""}` : ""}${r.partial ? " · projection unavailable" : ""}</span>
       </span>
       <span class="amt">${fmtTok(r.pending, S.K.decimals, S.K.symbol)}
         <small>pending</small></span>`;
@@ -2765,7 +2914,10 @@ function renderTopHolders() {
 
     if (open) {
       const body = el("div", "batch-body");
-      const addr = el("div", "derived", `${r.address} · each row below is one transaction's worth of mints, with the term it was opened for`);
+      const spentTxt = r.spent > 0n
+        ? ` · ${fmtEth(r.spent)} paid in mint fees${r.pricedMints < r.mints ? ` (covering ${r.pricedMints.toLocaleString()} of ${r.mints.toLocaleString()} mints)` : ""}`
+        : "";
+      const addr = el("div", "derived", `${r.address}${spentTxt} · each row below is one transaction's worth of mints, with the term it was opened for`);
       addr.style.wordBreak = "break-all";
       body.appendChild(addr);
       if (!holderBatches.has(r.address)) holderBatches.set(r.address, new Set());
