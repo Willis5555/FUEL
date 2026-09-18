@@ -434,7 +434,7 @@ input[type=range]{width:100%;accent-color:var(--accent-dim)}
     <div id="statsCharts"></div>
 
     <div class="panel">
-      <h3>Top pending balances</h3>
+      <h3>Top Minters</h3>
       <div class="row" style="align-items:flex-start">
         <p class="note" style="flex:1">Every wallet holding open mints, ranked by what those mints would pay out. Figures are the same ones the positions tab shows — read per wallet, not estimated. This reads a great deal of chain state, so it only runs when you ask.</p>
         <button class="btn sm fixed" id="btnTopLoad">Load list</button>
@@ -473,13 +473,17 @@ const CHAIN = {
   hex: "0x1237",
   name: "Robinhood Chain",
   rpc: "https://rpc.mainnet.chain.robinhood.com",
+  // batch: how many JSON-RPC calls this endpoint will accept in one HTTP request.
+  // ethers packs concurrent calls into a batch automatically, and an endpoint that
+  // refuses an oversized one answers 500 — which reads exactly like a broken
+  // contract call, so getting this wrong silently poisons reads rather than failing.
   rpcs: [
-    { url: "https://rpc.mainnet.chain.robinhood.com", gap: 120 },          // official, free, rate limited
-    { url: "https://robinhood.drpc.org", gap: 90 },                        // dRPC public endpoint for 4663
+    { url: "https://rpc.mainnet.chain.robinhood.com", gap: 120, batch: 50 },  // official, free, rate limited
+    { url: "https://robinhood.drpc.org", gap: 90, batch: 3 },                 // dRPC free plan caps batches at 3
     // Blockscout's JSON-RPC proxy. Its eth_getLogs caps at 1000 entries and
     // paginates instead of erroring, which would silently truncate a scan — so it
     // serves everything except logs, freeing the other two for the heavy work.
-    { url: "https://robinhoodchain.blockscout.com/api/eth-rpc", gap: 150, noLogs: true }
+    { url: "https://robinhoodchain.blockscout.com/api/eth-rpc", gap: 150, batch: 3, noLogs: true }
   ],
   explorer: "https://robin.etherscan.io",
   currency: { name: "Ether", symbol: "ETH", decimals: 18 }
@@ -843,10 +847,15 @@ async function boot() {
     url: cfg.url,
     gap: cfg.gap || 100,
     noLogs: !!cfg.noLogs,
-    provider: new E.JsonRpcProvider(timedRequest(cfg.url), { chainId: CHAIN.id, name: "robinhood" }, { staticNetwork: true }),
+    provider: new E.JsonRpcProvider(timedRequest(cfg.url), { chainId: CHAIN.id, name: "robinhood" },
+      { staticNetwork: true, batchMaxCount: cfg.batch || 1 }),
     ok: true,
     benchedUntil: 0,
-    nextFreeAt: 0
+    nextFreeAt: 0,
+    // How wide a getLogs range this endpoint will serve. Discovered rather than
+    // configured: they differ by orders of magnitude, and the difference between
+    // one request and four hundred is the difference between a second and a minute.
+    maxLogSpan: Infinity
   }));
   S.read = S.pool[0].provider;
 
@@ -1316,20 +1325,48 @@ async function loadUser() {
    wallet with a couple of thousand mints needed ~90 sequential round trips, each
    paced and each able to be rate limited — which looks exactly like a hang.
    Shrinks automatically if an endpoint rejects the payload size. */
+/* Several batches in flight at once: each is mostly spent waiting on one round
+   trip, and the endpoints pace themselves, so a single file of requests left most
+   of the available throughput idle. Each stretch is claimed once and written back
+   by index, so the result stays in call order however the lanes interleave. */
 async function chunked(calls, onProgress) {
-  const out = [];
-  let i = 0, span = 400;
-  while (i < calls.length) {
-    try {
-      const slice = calls.slice(i, i + span);
-      out.push(...await mc(slice));
-      i += slice.length;
-      onProgress?.(i, calls.length);
-    } catch (e) {
-      if (span <= 25) throw e;
-      span = Math.floor(span / 2);
+  const out = new Array(calls.length);
+  let span = 400, cursor = 0, done = 0, fatal = null;
+  const requeued = [];
+
+  const take = () => {
+    if (requeued.length) return requeued.shift();
+    if (cursor >= calls.length) return null;
+    const start = cursor;
+    const len = Math.min(span, calls.length - start);
+    cursor = start + len;
+    return [start, len];
+  };
+
+  const worker = async () => {
+    for (;;) {
+      if (fatal) return;
+      const job = take();
+      if (!job) return;
+      const [start, len] = job;
+      try {
+        const res = await mc(calls.slice(start, start + len));
+        for (let k = 0; k < res.length; k++) out[start + k] = res[k];
+        done += len;
+        onProgress?.(done, calls.length);
+      } catch (e) {
+        // too big for this endpoint: halve it and hand both halves back
+        if (len <= 25) { fatal = e; return; }
+        const half = Math.ceil(len / 2);
+        span = Math.min(span, Math.max(25, half));
+        requeued.push([start, half], [start + half, len - half]);
+      }
     }
-  }
+  };
+
+  const lanes = Math.max(1, Math.min(3, Math.ceil(calls.length / 400)));
+  await Promise.all(Array.from({ length: lanes }, worker));
+  if (fatal) throw fatal;
   return out;
 }
 
@@ -1602,7 +1639,9 @@ function batchCard(b, now, opts) {
         : "at today's rank"}</small></span>`;
   head.onclick = () => {
     if (open) openSet.delete(b.start); else openSet.add(b.start);
-    if (readOnly) renderLookup(); else renderPositions();
+    if (opts?.onToggle) opts.onToggle();
+    else if (readOnly) renderLookup();
+    else renderPositions();
   };
   box.appendChild(head);
 
@@ -1943,9 +1982,15 @@ function isTransient(e) {
    benched briefly rather than retried immediately — the whole point is to send the
    next attempt somewhere else. */
 let rrIndex = 0;
-function pickEndpoint(forLogs) {
+function pickEndpoint(forLogs, wantSpan) {
   const now = Date.now();
-  const usable = S.pool.filter(e => e.ok && (!forLogs || !e.noLogs));
+  let usable = S.pool.filter(e => e.ok && (!forLogs || !e.noLogs));
+  // prefer one that will actually serve a range this wide, rather than discovering
+  // it cannot and making every other endpoint pay for that
+  if (wantSpan) {
+    const wide = usable.filter(e => (e.maxLogSpan ?? Infinity) >= wantSpan);
+    if (wide.length) usable = wide;
+  }
   const healthy = usable.filter(e => e.benchedUntil <= now);
   const pool = healthy.length ? healthy : (usable.length ? usable : S.pool);
   // prefer whichever is free soonest, then round robin among equals
@@ -1991,27 +2036,37 @@ async function rpcRetry(fn, tries = 5) {
 async function scanLogs(fromBlock, toBlock, addresses, topicsFilter, onProgress) {
   const out = [];
   const total = toBlock - fromBlock + 1;
-  let span = 600000, hi = toBlock, fails = 0, entry = null;
+  // Ask for the whole window up front. One endpoint here answers a multi-million
+  // block query in under a second; the old fixed 600k start paid for hundreds of
+  // round trips it never needed, and any endpoint refusing a wide range used to
+  // shrink the span for all of them.
+  let span = total, hi = toBlock, fails = 0, entry = null;
 
   while (hi >= fromBlock) {
     const lo = Math.max(fromBlock, hi - span + 1);
+    const attempted = hi - lo + 1;
     try {
-      entry = pickEndpoint(true);
+      entry = pickEndpoint(true, attempted);
       await pace(entry);
       const logs = await entry.provider.getLogs({ address: addresses, topics: topicsFilter, fromBlock: lo, toBlock: hi });
       out.push(...logs);
       hi = lo - 1;
       fails = 0;
-      span = Math.min(1200000, Math.floor(span * 1.5));
+      span = Math.min(total, Math.floor(span * 1.5));
       onProgress?.(toBlock - hi, total, out.length);
       await sleep(40);
     } catch (e) {
-      fails++;
       if (isTransient(e)) {
+        fails++;
         // bench the endpoint that just failed so the retry lands on another one
         if (entry) entry.benchedUntil = Date.now() + 6000;
         if (fails > 14) return { logs: out, coveredFrom: hi + 1, complete: false, reason: e };
         await sleep(Math.min(4000, 300 * fails));
+      } else if (rangeTooLarge(e)) {
+        // this endpoint's ceiling, not everyone's — remember it and try elsewhere
+        if (entry) entry.maxLogSpan = Math.max(1000, Math.floor(attempted / 2));
+        const anyWider = S.pool.some(p => p.ok && !p.noLogs && (p.maxLogSpan ?? Infinity) >= attempted);
+        if (!anyWider) span = Math.max(1000, Math.floor(span / 2));
       } else if (span > 1000) {
         span = Math.max(1000, Math.floor(span / 2));
       } else {
@@ -2020,6 +2075,13 @@ async function scanLogs(fromBlock, toBlock, addresses, topicsFilter, onProgress)
     }
   }
   return { logs: out, coveredFrom: fromBlock, complete: true };
+}
+
+/* An endpoint refusing a range for being too wide, as opposed to being busy. The
+   transient check runs first, so "rate limit" never reaches this. */
+function rangeTooLarge(e) {
+  const m = (e?.shortMessage || e?.message || String(e)).toLowerCase();
+  return /too large|too many|exceed|more than|block range|ranges over|range is too/.test(m);
 }
 
 /* Blocks carry no timestamp in a log, and fetching one per log would be brutal.
@@ -2525,7 +2587,7 @@ function renderRecent() {
 }
 
 
-/* ======================= top pending balances ======================= */
+/* ======================= top minters ======================= */
 /* Two phases, because no contract lists holders. The batch minter's events name
    every wallet that has ever opened a mint; each of those is then read with the
    same function the positions tab uses, so the figures are identical by
@@ -2543,9 +2605,11 @@ async function loadTopHolders() {
   if (btn) { btn.disabled = true; btn.textContent = "Loading…"; }
   try {
     renderProgress(bar, 0);
-    topSay("Locating the starting block…");
-    const gen = Number(S.L.tokenGenesis ?? 0);
-    const fromBlock = await blockAtTime(gen > 0 ? gen : chainNow() - 30 * 86400);
+    topSay("Looking for wallets that have minted…");
+    // From the genesis block, which for this purpose is zero: the batch minter has
+    // no logs from before it was deployed, so searching for its start block costs
+    // a binary search over the chain and buys nothing.
+    const fromBlock = 0;
     const toBlock = await rpcRetry(p => p.getBlockNumber());
 
     const opened = I.batch.getEvent("BatchRankClaimed");
@@ -2598,27 +2662,45 @@ async function loadTopHolders() {
     const list = [...owners.entries()].sort((a, b) => b[1] - a[1]).map(e => e[0]);
     TOP.total = list.length;
     const rows = [];
-    for (let i = 0; i < list.length && !TOP.abort; i++) {
+    let done = 0, next = 0;
+
+    const readOne = async (addr) => {
       try {
-        const d = await fetchMintsFor(list[i]);
+        const d = await fetchMintsFor(addr);
         const f = pendingFuel(d);
         if (f.all.length) {
           rows.push({
-            address: list[i], pending: f.pending, mints: f.all.length,
+            address: addr, pending: f.pending, mints: f.all.length,
             positions: f.positionCount, overdue: f.overdue, nextUnlock: f.nextUnlock,
-            partial: !d.rankKnown
+            partial: !d.rankKnown,
+            // kept so a row can be opened up without reading the wallet again
+            batches: groupBatches(d.positions), soloMint: d.soloMint
           });
         }
       } catch (e) {
-        if (!isTransient(e)) console.warn("[top] skipped " + list[i], e);
+        if (!isTransient(e)) console.warn("[top] skipped " + addr, e);
       }
-      TOP.scanned = i + 1;
-      renderProgress(bar, 40 + Math.round((i + 1) / list.length * 60));
-      topSay(`Reading positions… ${i + 1} of ${list.length} wallets`);
+      done++;
+      TOP.scanned = done;
+      renderProgress(bar, 40 + Math.round(done / list.length * 60));
+      topSay(`Reading positions… ${done} of ${list.length} wallets`);
       rows.sort((a, b) => (b.pending > a.pending ? 1 : b.pending < a.pending ? -1 : 0));
       TOP.rows = rows.slice();
       renderTopHolders();
-    }
+    };
+
+    // said before the first read starts, not after it finishes — the biggest wallet
+    // goes first and takes the longest, which otherwise looks like a stall
+    topSay(`Reading positions… 0 of ${list.length} wallets`);
+    renderProgress(bar, 40);
+
+    /* A few wallets in flight at once. Each one is mostly waiting on a round trip,
+       and the endpoint pool paces itself, so overlapping them fills the gaps
+       without asking any single endpoint for more than it was already getting. */
+    const LANES = 4;
+    await Promise.all(Array.from({ length: Math.min(LANES, list.length) }, async () => {
+      while (next < list.length && !TOP.abort) await readOne(list[next++]);
+    }));
 
     TOP.complete = scanComplete && !TOP.abort;
     const held = rows.reduce((a, r) => a + r.pending, 0n);
@@ -2641,33 +2723,65 @@ async function loadTopHolders() {
   }
 }
 
+/* which wallet rows are open, and which of their batches — kept outside the render
+   so the board can redraw every time a wallet lands without collapsing anything */
+const openHolders = new Set();
+const holderBatches = new Map();
+
 function renderTopHolders() {
   const host = $("#topList");
   if (!host) return;
   const rows = TOP.rows;
-  if (!rows) { host.innerHTML = ""; return; }
+  host.innerHTML = "";
+  if (!rows) return;
   if (!rows.length) { host.innerHTML = `<div class="empty">No wallet holds an open mint.</div>`; return; }
 
   const now = chainNow();
-  const top = rows.slice(0, TOP_SHOWN);
   const mine = S.account ? S.account.toLowerCase() : null;
 
-  host.innerHTML = top.map((r, i) => {
+  rows.slice(0, TOP_SHOWN).forEach((r, i) => {
+    const open = openHolders.has(r.address);
     const isMine = mine && r.address.toLowerCase() === mine;
     const when = r.overdue
       ? `${r.overdue} past unlock`
       : r.nextUnlock ? `unlocks in ${fmtDur(r.nextUnlock - now)}` : "—";
-    return `<div class="pos${r.overdue ? " late" : ""}">
-      <div class="idx">${i + 1}</div>
-      <div>
-        <div class="when">${link(r.address)}${isMine ? ` <span class="pill safe">you</span>` : ""}</div>
-        <div class="meta">${r.mints.toLocaleString()} mint${r.mints === 1 ? "" : "s"} in ${r.positions.toLocaleString()} position${r.positions === 1 ? "" : "s"} · ${when}${r.partial ? " · projection unavailable" : ""}</div>
-      </div>
-      <div class="amt">${fmtTok(r.pending, S.K.decimals, S.K.symbol)}
-        <small>pending</small></div>
-    </div>`;
-  }).join("") +
-  (rows.length > TOP_SHOWN ? `<div class="derived" style="margin-top:10px">Showing the top ${TOP_SHOWN} of ${rows.length.toLocaleString()} wallets holding open mints.</div>` : "");
+
+    const box = el("div", "batch" + (r.overdue ? " late" : ""));
+    const head = el("button", "batch-head");
+    head.setAttribute("aria-expanded", String(open));
+    head.innerHTML = `
+      <span class="twist">${open ? "▼" : "▶"}</span>
+      <span>
+        <span class="when">${i + 1}. <span class="mono">${short(r.address)}</span>${isMine ? ` <span class="pill safe">you</span>` : ""}</span>
+        <span class="meta">${r.mints.toLocaleString()} mint${r.mints === 1 ? "" : "s"} in ${r.positions.toLocaleString()} batch${r.positions === 1 ? "" : "es"} · ${when}${r.partial ? " · projection unavailable" : ""}</span>
+      </span>
+      <span class="amt">${fmtTok(r.pending, S.K.decimals, S.K.symbol)}
+        <small>pending</small></span>`;
+    head.onclick = () => {
+      if (open) openHolders.delete(r.address); else openHolders.add(r.address);
+      renderTopHolders();
+    };
+    box.appendChild(head);
+
+    if (open) {
+      const body = el("div", "batch-body");
+      const addr = el("div", "derived", `${r.address} · each row below is one transaction's worth of mints, with the term it was opened for`);
+      addr.style.wordBreak = "break-all";
+      body.appendChild(addr);
+      if (!holderBatches.has(r.address)) holderBatches.set(r.address, new Set());
+      const openSet = holderBatches.get(r.address);
+      (r.batches || []).forEach(b => body.appendChild(
+        batchCard(b, now, { readOnly: true, openSet, onToggle: renderTopHolders })));
+      if (r.soloMint) body.appendChild(posCard(r.soloMint, now, true));
+      box.appendChild(body);
+    }
+    host.appendChild(box);
+  });
+
+  if (rows.length > TOP_SHOWN) {
+    host.appendChild(el("div", "derived",
+      `Showing the top ${TOP_SHOWN} of ${rows.length.toLocaleString()} wallets holding open mints.`));
+  }
 }
 
 
