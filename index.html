@@ -186,6 +186,23 @@ input[type=range]{width:100%;accent-color:var(--accent-dim)}
 .mono{font-family:var(--mono);font-size:12.5px}
 .addr{font-family:var(--sans);color:var(--text-dim)}
 
+/* hover readout, shared by both chart shapes: an invisible band per data point
+   carries the figures, and the tip is positioned from the pointer since the svg
+   scales to its box. Columns light up; a line gets a crosshair and a marker. */
+.chartwrap{position:relative}
+.charthit{fill:transparent}
+.charthit.col:hover{fill:rgba(150,201,156,.10)}
+.hovg .xh{opacity:0;transition:opacity 90ms ease}
+.hovg:hover .xh{opacity:1}
+.chart-tip{
+  position:absolute;z-index:6;pointer-events:none;transform:translate(-50%,-118%);
+  background:var(--panel);border:1px solid var(--line);border-left:2px solid var(--accent);
+  padding:7px 11px;font-family:var(--sans);font-size:12px;color:var(--text-dim);white-space:nowrap;
+}
+.chart-tip .v{display:block;margin-top:3px;font-family:var(--serif);font-size:15px;color:var(--accent)}
+.chart-tip .part{display:block;margin-top:3px;color:var(--amber);font-size:11px}
+.chart-tip[hidden]{display:none}
+
 #toasts{position:fixed;right:20px;bottom:20px;z-index:100;display:flex;flex-direction:column;gap:9px;max-width:380px}
 .toast{border:1px solid var(--line);border-left:2px solid var(--accent-dim);background:var(--panel);padding:12px 15px;font-family:var(--sans);font-size:13px;line-height:1.5}
 .toast.err{border-left-color:var(--red)}
@@ -344,6 +361,17 @@ input[type=range]{width:100%;accent-color:var(--accent-dim)}
         </div>
       </div>
 
+      <div class="panel">
+        <h3>Recent staking</h3>
+        <div class="row" style="align-items:flex-start">
+          <p class="note" style="flex:1">Stakes opened and withdrawn across the protocol. Scans backwards from the newest block only until it has twenty, so it stays cheap.</p>
+          <button class="btn sm fixed" id="btnStakeFeed">Load</button>
+        </div>
+        <div id="stakeFeedBar" class="progress" hidden></div>
+        <div id="stakeFeedMsg" class="derived"></div>
+        <div id="stakeFeed"></div>
+      </div>
+
     </div>
   </section>
 
@@ -382,18 +410,19 @@ input[type=range]{width:100%;accent-color:var(--accent-dim)}
     <div class="panel"><h3>Everything else</h3><dl class="kv" id="protoDetail"></dl></div>
     <div class="grid2">
     <div class="panel">
-      <h3>History</h3>
+      <h3>Charts</h3>
       <div class="row" style="align-items:flex-start">
         <p class="note" style="flex:1">Neither of these is kept as a series on chain. Each line is today's real figure walked backwards through the events that moved it.</p>
         <select id="statsRange" class="fixed" style="width:150px">
+          <option value="1">Last 24 hours</option>
           <option value="7">Last 7 days</option>
           <option value="30">Last 30 days</option>
           <option value="all" selected>All history</option>
         </select>
-        <button class="btn sm fixed" id="btnStatsRefresh">Refresh</button>
+        <button class="btn sm fixed" id="btnStatsRefresh">Load charts</button>
       </div>
       <div id="statsBar" class="progress" hidden></div>
-      <div id="statsMsg" class="derived"></div>
+      <div id="statsMsg" class="derived">Charts are not loaded. Scanning the chain takes a while and the public RPCs rate limit, so it only runs when you ask.</div>
     </div>
     <div class="panel">
       <h3>Late-claim penalty</h3>
@@ -403,6 +432,17 @@ input[type=range]{width:100%;accent-color:var(--accent-dim)}
     </div>
     </div>
     <div id="statsCharts"></div>
+
+    <div class="panel">
+      <h3>Top pending balances</h3>
+      <div class="row" style="align-items:flex-start">
+        <p class="note" style="flex:1">Every wallet holding open mints, ranked by what those mints would pay out. Figures are the same ones the positions tab shows — read per wallet, not estimated. This reads a great deal of chain state, so it only runs when you ask.</p>
+        <button class="btn sm fixed" id="btnTopLoad">Load list</button>
+      </div>
+      <div id="topBar" class="progress" hidden></div>
+      <div id="topMsg" class="derived">Not loaded. Finding every holder means scanning the chain for mint events and then reading each wallet's positions, which takes a few minutes on the public RPCs.</div>
+      <div id="topList"></div>
+    </div>
   </section>
 
 
@@ -415,7 +455,7 @@ input[type=range]{width:100%;accent-color:var(--accent-dim)}
   </div>
 
   <footer class="foot">
-    unofficial front end for Robinhood Chain · RPCs: robinhood.com + drpc.org · Price: on-chain FUEL pair · Not financial advice.<br>
+    unofficial front end for Robinhood Chain · build <span id="buildId">—</span> · Price: on-chain FUEL pair · Not financial advice.<br>
     This dashboard can send transactions when you ask it to. Verify contract addresses yourself before approving anything.
   </footer>
 </div>
@@ -434,8 +474,12 @@ const CHAIN = {
   name: "Robinhood Chain",
   rpc: "https://rpc.mainnet.chain.robinhood.com",
   rpcs: [
-    "https://rpc.mainnet.chain.robinhood.com",   // official, free, rate limited
-    "https://robinhood.drpc.org"                 // dRPC public endpoint for 4663
+    { url: "https://rpc.mainnet.chain.robinhood.com", gap: 120 },          // official, free, rate limited
+    { url: "https://robinhood.drpc.org", gap: 90 },                        // dRPC public endpoint for 4663
+    // Blockscout's JSON-RPC proxy. Its eth_getLogs caps at 1000 entries and
+    // paginates instead of erroring, which would silently truncate a scan — so it
+    // serves everything except logs, freeing the other two for the heavy work.
+    { url: "https://robinhoodchain.blockscout.com/api/eth-rpc", gap: 150, noLogs: true }
   ],
   explorer: "https://robin.etherscan.io",
   currency: { name: "Ether", symbol: "ETH", decimals: 18 }
@@ -523,7 +567,7 @@ const S = {
   signer: null,
   account: null,
   chainOk: false,
-  mcOk: false,
+  mcOk: null,          // null = untested; mc() settles it on first use
   skewMs: 0,           // chainTime - deviceTime
   K: {},               // protocol constants
   L: {},               // live protocol state
@@ -574,21 +618,29 @@ function clampTerm(v, lo, hi) {
 function short(a) { return a ? a.slice(0, 6) + "…" + a.slice(-4) : "—"; }
 function link(a) { return `<a class="mono" href="${CHAIN.explorer}/address/${a}" target="_blank" rel="noopener">${short(a)}</a>`; }
 
-function fmtEth(v, dp = 5) {
+/* Every ETH figure carries its dollar value, so the suffix lives here rather than
+   at the call sites — one place to change, and a new figure gets it for free.
+   Pass usd:false for somewhere too tight to hold it, like a button label. */
+function fmtEth(v, dp = 5, usd = true) {
   if (v == null) return "—";
   const s = E.formatEther(v);
   const n = Number(s);
   if (n === 0) return "0 ETH";
-  if (n < 0.00001) return "<0.00001 ETH";
-  return n.toFixed(dp).replace(/0+$/, "").replace(/\.$/, "") + " ETH";
+  const eth = n < 0.00001 ? "<0.00001 ETH" : n.toFixed(dp).replace(/0+$/, "").replace(/\.$/, "") + " ETH";
+  return usd ? eth + usdSuffix(v) : eth;
 }
-/* Dollar value alongside an ETH amount, when a price is available. */
-function usdSuffix(wei) {
+/* Dollar value of an ETH amount, when a price is available. Bare, for somewhere
+   that wants to place it itself; suffixed, for appending to a figure. */
+function usdPlain(wei) {
   if (!ETH_USD || wei == null) return "";
   const v = Number(E.formatEther(wei)) * ETH_USD;
   if (!isFinite(v) || v <= 0) return "";
-  if (v < 0.01) return " (~<$0.01)";
-  return ` (~$${v.toLocaleString(undefined, { maximumFractionDigits: v < 100 ? 2 : 0 })})`;
+  if (v < 0.01) return "~<$0.01";
+  return `~$${v.toLocaleString(undefined, { maximumFractionDigits: v < 100 ? 2 : 0 })}`;
+}
+function usdSuffix(wei) {
+  const s = usdPlain(wei);
+  return s ? ` (${s})` : "";
 }
 
 function fmtTok(v, dec = 18, sym = "FUEL") {
@@ -658,36 +710,70 @@ function explain(err) {
 
 /* ======================= multicall ======================= */
 /* calls: [{to, iface, fn, args}]  ->  [decoded | null] (null = that one call failed) */
-async function mc(calls, provider) {
-  const p = provider || S.read;
-  if (!calls.length) return [];
-  if (!S.mcOk) {
-    // fall back to individual eth_calls if multicall is not present
-    return Promise.all(calls.map(async c => {
+/* Individual eth_calls, fired concurrently. ethers packs concurrent requests on
+   one provider into a single JSON-RPC batch, so this is a handful of HTTP round
+   trips rather than one per call — and crucially it does NOT pace each call,
+   which previously turned a large wallet into thousands of serialized requests. */
+async function directCalls(calls) {
+  const entry = pickEndpoint(false);
+  const prov = (entry && entry.provider) || S.read;
+  const out = [];
+  const CONC = 50;
+  for (let i = 0; i < calls.length; i += CONC) {
+    const slice = calls.slice(i, i + CONC);
+    const res = await Promise.all(slice.map(async c => {
       try {
-        const raw = await rpcRetry(prov => prov.call({ to: c.to, data: c.iface.encodeFunctionData(c.fn, c.args || []) }));
+        const raw = await prov.call({ to: c.to, data: c.iface.encodeFunctionData(c.fn, c.args || []) });
+        if (!raw || raw === "0x") return null;
         const r = c.iface.decodeFunctionResult(c.fn, raw);
         return r.length === 1 ? r[0] : r;
       } catch (_) { return null; }
     }));
+    out.push(...res);
   }
-  const payload = calls.map(c => ({
-    target: c.to,
-    allowFailure: true,                         // one bad view must not blank the page
-    callData: c.iface.encodeFunctionData(c.fn, c.args || [])
-  }));
-  const raw = await rpcRetry(prov => prov.call({
-    to: A.multicall,
-    data: I.mc.encodeFunctionData("aggregate3", [payload])
-  }));
-  const [results] = I.mc.decodeFunctionResult("aggregate3", raw);
-  return results.map((r, i) => {
-    if (!r.success) return null;
+  return out;
+}
+
+async function mc(calls) {
+  if (!calls.length) return [];
+
+  if (S.mcOk !== false) {
+    const payload = calls.map(c => ({
+      target: c.to,
+      allowFailure: true,                       // one bad view must not blank the page
+      callData: c.iface.encodeFunctionData(c.fn, c.args || [])
+    }));
     try {
-      const d = calls[i].iface.decodeFunctionResult(calls[i].fn, r.returnData);
-      return d.length === 1 ? d[0] : d;
-    } catch (_) { return null; }
-  });
+      const raw = await rpcRetry(prov => prov.call({
+        to: A.multicall,
+        data: I.mc.encodeFunctionData("aggregate3", [payload])
+      }));
+      if (raw && raw !== "0x") {
+        const [results] = I.mc.decodeFunctionResult("aggregate3", raw);
+        S.mcOk = true;
+        return results.map((r, i) => {
+          if (!r.success) return null;
+          try {
+            const d = calls[i].iface.decodeFunctionResult(calls[i].fn, r.returnData);
+            return d.length === 1 ? d[0] : d;
+          } catch (_) { return null; }
+        });
+      }
+      // empty return means nothing is deployed at that address
+      noteNoMulticall("the multicall contract returned nothing");
+    } catch (e) {
+      if (isTransient(e)) throw e;              // a rate limit is not a missing contract
+      noteNoMulticall(e && e.message);
+    }
+  }
+  return directCalls(calls);
+}
+
+function noteNoMulticall(why) {
+  if (S.mcOk === false) return;
+  S.mcOk = false;
+  console.warn("[mc] multicall unavailable, falling back to individual calls:", why);
+  toast("Multicall is not usable on this RPC — reads will be slower but will still work.", "err");
 }
 function balCall(addr) { return { to: A.multicall, iface: I.mc, fn: "getEthBalance", args: [addr] }; }
 
@@ -740,47 +826,82 @@ function drawGauge(secsLate) {
 }
 
 /* ======================= boot ======================= */
+/* An endpoint that stalls is worse than one that refuses: ethers waits five
+   minutes before giving up, so a single wedged request holds every caller behind
+   it — the chain-id probe below, a retry that would otherwise move on, a wallet
+   load. A deadline turns that stall into a transient failure the pool can route
+   around. */
+const RPC_TIMEOUT_MS = 12000;
+function timedRequest(url) {
+  const req = new E.FetchRequest(url);
+  req.timeout = RPC_TIMEOUT_MS;
+  return req;
+}
+
 async function boot() {
-  S.pool = CHAIN.rpcs.map(url => ({
-    url,
-    provider: new E.JsonRpcProvider(url, { chainId: CHAIN.id, name: "robinhood" }, { staticNetwork: true }),
+  S.pool = CHAIN.rpcs.map(cfg => ({
+    url: cfg.url,
+    gap: cfg.gap || 100,
+    noLogs: !!cfg.noLogs,
+    provider: new E.JsonRpcProvider(timedRequest(cfg.url), { chainId: CHAIN.id, name: "robinhood" }, { staticNetwork: true }),
     ok: true,
-    benchedUntil: 0
+    benchedUntil: 0,
+    nextFreeAt: 0
   }));
   S.read = S.pool[0].provider;
 
+  // Timers first. They used to start only after a successful load, so one rate
+  // limited request at startup left the page with no clock, no redraw and no way
+  // back — every panel stuck empty rather than showing that it had no data yet.
+  setInterval(tick, 1000);
+  setInterval(() => { if (!STATS.busy) loadLive().catch(() => {}); }, 45000);
+  setInterval(() => { fetchEthUsd().catch(() => {}); }, 300000);   // keep the dollar figures current
+  tick();
+
   // staticNetwork skips ethers' own check, so confirm each endpoint is chain 4663.
   // An endpoint quietly serving a different chain would poison every read.
+  // On a shorter leash than an ordinary request: this gates the first paint, and
+  // an endpoint that cannot answer a trivial call promptly is not one to open with.
   await Promise.all(S.pool.map(async e => {
     try {
-      const id = await e.provider.send("eth_chainId", []);
+      const id = await Promise.race([
+        e.provider.send("eth_chainId", []),
+        sleep(4000).then(() => Promise.reject(new Error("chain id probe timed out")))
+      ]);
       e.ok = parseInt(id, 16) === CHAIN.id;
     } catch (_) { e.ok = false; }
   }));
   if (!S.pool.some(e => e.ok)) S.pool.forEach(e => { e.ok = true; });   // all unreachable: try anyway
 
+  startup(0);
+}
+
+/* Startup retries instead of giving up. A rate limit at the wrong moment is
+   temporary, and the page should come back on its own. */
+async function startup(attempt) {
+  const netTxt = $("#netTxt");
   try {
+    if (attempt > 0 && netTxt) netTxt.textContent = "reconnecting…";
+
     const blk = await rpcRetry(p => p.getBlock("latest"));
     S.skewMs = Number(blk.timestamp) * 1000 - Date.now();
-    setChip("#dotNet", "ok"); $("#netTxt").textContent = `${CHAIN.name} · block ${blk.number}`;
+    setChip("#dotNet", "ok");
+    if (netTxt) netTxt.textContent = `${CHAIN.name} · block ${blk.number}`;
     renderClockChip();
+
+    await busy(async () => { await loadConstants(); await loadLive(); });
+    fetchEthUsd().catch(() => {});
+    S.loaded = true;
   } catch (e) {
-    setChip("#dotNet", "bad"); $("#netTxt").textContent = "RPC unreachable";
-    toast("Could not reach the public RPC. It is rate limited — try again in a moment.", "err");
-    return;
+    setChip("#dotNet", "bad");
+    const wait = Math.min(30000, 3000 * (attempt + 1));
+    if (netTxt) netTxt.textContent = `retrying in ${Math.round(wait / 1000)}s`;
+    if (attempt === 0) {
+      toast("Could not reach the RPCs on the first try — they rate limit. Retrying automatically; figures will fill in when one answers.", "err");
+    }
+    console.error("[startup] attempt " + attempt + " failed:", e);
+    setTimeout(() => startup(attempt + 1), wait);
   }
-
-  // is Multicall3 actually deployed here, or just assumed?
-  try {
-    const code = await rpcRetry(p => p.getCode(A.multicall));
-    S.mcOk = code && code !== "0x";
-  } catch (_) { S.mcOk = false; }
-  if (!S.mcOk) toast("Multicall is not deployed on this chain — falling back to individual reads. Loading will be slower.", "err");
-
-  await busy(async () => { await loadConstants(); await loadLive(); });
-  fetchEthUsd().catch(() => {});      // dollar figures should not wait for a wallet
-  setInterval(tick, 1000);
-  setInterval(() => loadLive().catch(() => {}), 45000);
 }
 
 function setChip(sel, kind) { const d = $(sel); d.className = "dot " + kind; }
@@ -1085,7 +1206,7 @@ async function ensureChain() {
 /* ======================= user data ======================= */
 /* Read every position an address holds. Used for the connected wallet and for
    the lookup, which needs no wallet at all — it is all public state. */
-async function fetchMintsFor(u) {
+async function fetchMintsFor(u, barSel) {
   const head = await mc([
     { to: A.batchMinter, iface: I.batch, fn: "proxiesOf", args: [u] },
     { to: A.token, iface: I.token, fn: "balanceOf", args: [u] },
@@ -1112,15 +1233,22 @@ async function fetchMintsFor(u) {
     : null;
 
   // proxy addresses, then the mint stored under each
+  // three phases over the same set, so progress is thirds. The caller says which
+  // bar to drive — this runs for the connected wallet and for the address lookup.
+  const bar = barSel ? $(barSel) : null;
+  const phase = (n, base) => (done, total) => {
+    if (bar) renderProgress(bar, Math.round(base + (done / Math.max(1, total)) * 33));
+  };
+
   let proxies = [];
   if (count > 0) {
     const idxCalls = [];
     for (let i = 0; i < count; i++) idxCalls.push({ to: A.batchMinter, iface: I.batch, fn: "proxyAddress", args: [u, i] });
-    proxies = await chunked(idxCalls);
+    proxies = await chunked(idxCalls, phase(1, 0));
   }
 
   const mintCalls = proxies.map(p => ({ to: A.token, iface: I.token, fn: "userMints", args: [p] }));
-  const mints = mintCalls.length ? await chunked(mintCalls) : [];
+  const mints = mintCalls.length ? await chunked(mintCalls, phase(2, 33)) : [];
 
   const list = [];
   mints.forEach((m, i) => {
@@ -1142,7 +1270,7 @@ async function fetchMintsFor(u) {
       p.rankDelta = delta;
       return { to: A.token, iface: I.token, fn: "getGrossReward", args: [delta, p.amplifier, p.term, p.eaaRate] };
     });
-    const gross = await chunked(gcalls);
+    const gross = await chunked(gcalls, phase(3, 66));
     all.forEach((p, i) => p.gross = gross[i] == null ? null : gross[i] * unit());
 
   } else {
@@ -1157,8 +1285,9 @@ async function loadUser() {
   const pb = $("#posBar");
   renderProgress(pb, null);
   setBusy(1);
+  S.loadingUser = true;
   try {
-  const d = await fetchMintsFor(S.account);
+  const d = await fetchMintsFor(S.account, "#posBar");
   S.userData = d;
   S.positions = d.positions;
   S.soloMint = d.soloMint;
@@ -1176,16 +1305,30 @@ async function loadUser() {
   if (rule) rule.style.display = (d.positions.length || d.soloMint) ? "" : "none";
   renderWalletStats("#ownStats", (d.positions.length || d.soloMint) ? d : null).catch(() => {});
   } finally {
+    S.loadingUser = false;
     hideProgress(pb);
     setBusy(-1);
   }
 }
 
 /* keep each multicall payload to a sane size for a rate-limited RPC */
-async function chunked(calls, size = 60) {
+/* aggregate3 carries hundreds of calls in one request, so batch big. At 60 a
+   wallet with a couple of thousand mints needed ~90 sequential round trips, each
+   paced and each able to be rate limited — which looks exactly like a hang.
+   Shrinks automatically if an endpoint rejects the payload size. */
+async function chunked(calls, onProgress) {
   const out = [];
-  for (let i = 0; i < calls.length; i += size) {
-    out.push(...await mc(calls.slice(i, i + size)));
+  let i = 0, span = 400;
+  while (i < calls.length) {
+    try {
+      const slice = calls.slice(i, i + span);
+      out.push(...await mc(slice));
+      i += slice.length;
+      onProgress?.(i, calls.length);
+    } catch (e) {
+      if (span <= 25) throw e;
+      span = Math.floor(span / 2);
+    }
   }
   return out;
 }
@@ -1213,9 +1356,21 @@ function renderProtocolDay() {
   n.title = note;
 }
 
+/* Each panel renders independently. One throwing used to abort the rest of the
+   chain, which is how a single bad value blanked half the page. */
 function renderAll() {
-  renderHero(); renderMintSide(); renderStake(); renderBurns();
-  renderVault(); renderFees(); renderProtocolDay(); renderProtocolStats(); renderHeroStats();
+  const parts = [
+    ["hero", renderHero], ["mint", renderMintSide], ["stake", renderStake],
+    ["burns", renderBurns], ["vault", renderVault], ["fees", renderFees],
+    ["day", renderProtocolDay], ["protocol stats", renderProtocolStats],
+    ["hero stats", renderHeroStats]
+  ];
+  const failed = [];
+  for (const [name, fn] of parts) {
+    try { fn(); }
+    catch (e) { failed.push(name); console.error("[render] " + name + " failed:", e); }
+  }
+  if (failed.length) toast(`Some panels failed to draw: ${failed.join(", ")}. Details are in the browser console.`, "err");
 }
 
 function bigStat(k, v, sub) {
@@ -1277,8 +1432,9 @@ function renderProtocolStats() {
     bigStat("Global rank", f.rank, "one step per mint opened") +
     bigStat("Price", f.price, `per ${K.symbol}`) +
     bigStat("Total supply", f.supply, `${K.symbol} in existence`) +
-    bigStat("Pooled ETH", fmtEth(f.pooled).replace(" ETH", ""),
-      "burn pools, pump fund, unsplit fees") +
+    // the tile's headline stays the bare number; its dollar value rides in the caption
+    bigStat("Pooled ETH", fmtEth(f.pooled, 5, false).replace(" ETH", ""),
+      [usdPlain(f.pooled), "burn pools, pump fund, unsplit fees"].filter(Boolean).join(" · ")) +
     bigStat("Max term", maxT != null ? maxT.toLocaleString() + " days" : "—",
       startCeiling && maxT > startCeiling ? `up from ${startCeiling} at launch` : "grows with participation") +
     bigStat("Reward amplifier", amp != null ? amp.toLocaleString() : "—",
@@ -1464,7 +1620,12 @@ function renderPositions() {
   if (rb) {
     rb.innerHTML = `A matured mint shows its exact payout — the contract reads the global rank at the moment you claim. One still running shows what it would pay at today's rank; that figure moves as the rank climbs.`;
   }
-  if (!S.account) { host.innerHTML = `<div class="empty">Connect a wallet to load your mints.</div>`; runsHost.innerHTML = ""; return; }
+  if (!S.account) {
+    hideProgress($("#posBar"));
+    host.innerHTML = `<div class="empty">Connect a wallet to load your mints.</div>`;
+    runsHost.innerHTML = "";
+    return;
+  }
   if (!S.positions.length && !S.soloMint) {
     host.innerHTML = `<div class="empty">No open mints. Open one from the mint tab.</div>`;
     runsHost.innerHTML = ""; return;
@@ -1526,7 +1687,7 @@ async function quoteRun(run, n) {
   const node = $(`#runFee${n}`);
   if (!node) return;
   node.textContent = (r[0] != null && r[1] != null)
-    ? `fee ${fmtEth(r[0] + r[1])}${usdSuffix(r[0] + r[1])} at current gas — claim plus the new mint`
+    ? `fee ${fmtEth(r[0] + r[1])} at current gas — claim plus the new mint`
     : "fee unavailable";
 }
 
@@ -1622,10 +1783,10 @@ function renderBurns() {
       statRow("Slippage the owner has set", b.slippage != null ? Number(b.slippage) + "%" : "—", true) +
       statRow("Slot length", `${Math.round(slot / 60)} min${b.slotDerived ? " (assumed — no burns yet to measure)" : ""}`, true) +
       statRow("ETH ready to deploy this slot",
-              b.ready != null ? fmtEth(b.ready) + usdSuffix(b.ready) : "—") +
+              b.ready != null ? fmtEth(b.ready) : "—") +
       statRow("Your cut for calling it",
               b.ready != null && b.ready > 0n
-                ? `${fmtEth(b.ready * CALLER_REWARD_BPS / 10000n)}${usdSuffix(b.ready * CALLER_REWARD_BPS / 10000n)} · 1.5%`
+                ? `${fmtEth(b.ready * CALLER_REWARD_BPS / 10000n)} · 1.5%`
                 : "1.5% of the slot", true) +
       statRow(spent ? "This slot is done, next opens" : "Open now, this slot ends",
               nextAt ? fmtDur(nextAt - now) : "—", true);
@@ -1690,7 +1851,7 @@ function renderFees() {
        ${p(S.K.VAULT_BPS)} pump fund · ${p(S.K.BURN_BPS)} FUEL burn · ${p(S.K.MORE_BPS)} MORE burn</div></div>` +
     statRow("Threshold to trigger", fmtEth(min), true);
 
-  const btn = el("button", "btn", ready ? "Distribute fees" : `Needs ${fmtEth(min > bal ? min - bal : 0n)} more`);
+  const btn = el("button", "btn", ready ? "Distribute fees" : `Needs ${fmtEth(min > bal ? min - bal : 0n, 5, false)} more`);
   btn.style.width = "100%"; btn.style.marginTop = "12px";
   btn.disabled = !S.account || !ready;
   btn.onclick = doDistribute;
@@ -1782,19 +1943,31 @@ function isTransient(e) {
    benched briefly rather than retried immediately — the whole point is to send the
    next attempt somewhere else. */
 let rrIndex = 0;
-function pickEndpoint() {
+function pickEndpoint(forLogs) {
   const now = Date.now();
-  const healthy = S.pool.filter(e => e.ok && e.benchedUntil <= now);
-  const list = healthy.length ? healthy : S.pool.filter(e => e.ok);
-  const pool = list.length ? list : S.pool;
-  return pool[rrIndex++ % pool.length];
+  const usable = S.pool.filter(e => e.ok && (!forLogs || !e.noLogs));
+  const healthy = usable.filter(e => e.benchedUntil <= now);
+  const pool = healthy.length ? healthy : (usable.length ? usable : S.pool);
+  // prefer whichever is free soonest, then round robin among equals
+  const soonest = Math.min(...pool.map(e => e.nextFreeAt));
+  const free = pool.filter(e => e.nextFreeAt <= soonest + 30);
+  return free[rrIndex++ % free.length];
+}
+
+/* Space requests out per endpoint rather than firing as fast as the loop allows.
+   Staying under a limit beats being throttled by it and backing off afterwards. */
+async function pace(entry) {
+  const now = Date.now();
+  if (entry.nextFreeAt > now) await sleep(entry.nextFreeAt - now);
+  entry.nextFreeAt = Date.now() + entry.gap;
 }
 
 async function rpcRetry(fn, tries = 5) {
   let last;
   for (let i = 0; i < tries; i++) {
-    const entry = pickEndpoint();
+    const entry = pickEndpoint(false);
     try {
+      await pace(entry);
       const out = await fn(entry.provider);
       entry.benchedUntil = 0;
       return out;
@@ -1823,7 +1996,8 @@ async function scanLogs(fromBlock, toBlock, addresses, topicsFilter, onProgress)
   while (hi >= fromBlock) {
     const lo = Math.max(fromBlock, hi - span + 1);
     try {
-      entry = pickEndpoint();
+      entry = pickEndpoint(true);
+      await pace(entry);
       const logs = await entry.provider.getLogs({ address: addresses, topics: topicsFilter, fromBlock: lo, toBlock: hi });
       out.push(...logs);
       hi = lo - 1;
@@ -1900,6 +2074,22 @@ function buildSeries(logs, coveredFrom, ctx) {
   const ranks = new Array(nb).fill(0);
   const fuelBurnFlow = new Array(nb).fill(0n);
   const moreByFuelFlow = new Array(nb).fill(0n);
+  // Only the arrivals. Pooled nets burns and sweeps off against them, which answers
+  // a different question — this one is gross ETH in, before anything is spent.
+  // Counted by whole calendar units rather than by the scan's rolling bucket, since
+  // "how much came in that day" is a question about days. The 24-hour range counts
+  // hours instead, because a day would collapse it into two part-days.
+  const inflowByUnit = new Map();
+  const byHour = !!ctx.inflowByHour;
+  const unitKeyOf = t => {
+    const d = new Date(t * 1000);
+    if (byHour) d.setMinutes(0, 0, 0); else d.setHours(0, 0, 0, 0);
+    return Math.floor(d.getTime() / 1000);
+  };
+  const addInflow = (t, amt) => {
+    const k = unitKeyOf(t);
+    inflowByUnit.set(k, (inflowByUnit.get(k) ?? 0n) + amt);
+  };
   const recent = [];
 
   for (const lg of logs) {
@@ -1908,10 +2098,13 @@ function buildSeries(logs, coveredFrom, ctx) {
     const i = idxOf(t), top = lg.topics[0];
     try {
       if (top === ev.feesRecv) {
-        pooled[i] += I.feeDist.parseLog(lg).args[1];
+        const amt = I.feeDist.parseLog(lg).args[1];
+        pooled[i] += amt;
+        addInflow(t, amt);
       } else if (top === ev.received) {
         const pl = I.vault.parseLog(lg);
-        if (pl.args[0]?.toLowerCase() !== A.feeDist.toLowerCase()) pooled[i] += pl.args[1];
+        // ETH forwarded on by the distributor was already counted as it arrived
+        if (pl.args[0]?.toLowerCase() !== A.feeDist.toLowerCase()) { pooled[i] += pl.args[1]; addInflow(t, pl.args[1]); }
       } else if (top === ev.swept) {
         pooled[i] -= I.vault.parseLog(lg).args[2];
       } else if (top === ev.buyBurn) {
@@ -1947,6 +2140,23 @@ function buildSeries(logs, coveredFrom, ctx) {
     .reduce((a, v) => a + (v ?? 0n), 0n);
   const pooledSeries = backFrom(currentTotal, pooled);
 
+  // One entry per whole unit, gaps filled, walked by the calendar so a DST change
+  // cannot drift it. The first and last are only as complete as the window: the scan
+  // starts partway through one and the current one is still running.
+  const inflowDays = [];
+  const cursor = new Date(effStart * 1000);
+  if (byHour) cursor.setMinutes(0, 0, 0); else cursor.setHours(0, 0, 0, 0);
+  const endKey = unitKeyOf(now), firstKey = unitKeyOf(effStart);
+  while (Math.floor(cursor.getTime() / 1000) <= endKey) {
+    const k = Math.floor(cursor.getTime() / 1000);
+    inflowDays.push({
+      t: k,
+      v: inflowByUnit.get(k) ?? 0n,
+      partial: k === endKey || (k === firstKey && effStart > k)
+    });
+    if (byHour) cursor.setHours(cursor.getHours() + 1); else cursor.setDate(cursor.getDate() + 1);
+  }
+
   const rankSeries = new Array(nb).fill(0);
   let r = Number(S.L.globalRank ?? 0n);
   for (let i = nb - 1; i >= 0; i--) { rankSeries[i] = r; r -= ranks[i]; }
@@ -1955,7 +2165,7 @@ function buildSeries(logs, coveredFrom, ctx) {
   recent.length = Math.min(recent.length, RECENT_PER_PAGE);
 
   return {
-    edges, pooledSeries, rankSeries,
+    edges, pooledSeries, rankSeries, inflowDays, inflowByHour: byHour,
     fuelBurnedSeries: backFrom(S.burners.fuel?.burnt, fuelBurnFlow),
     moreByFuelSeries: backFrom(S.burners.more?.burnt, moreByFuelFlow),
     negative: pooledSeries.some(v => v < 0n),
@@ -2010,7 +2220,9 @@ async function loadStats() {
 
     statsSay("Mapping blocks to time…");
     const tsOf = await buildTimeMap(fromBlock, toBlock);
-    const ctx = { now, start, bucketS, bucketH, days, tsOf, ev, complete: false };
+    // the chosen range decides the inflow unit, not the window it works out to —
+    // early in the protocol's life every range covers only a day or two
+    const ctx = { now, start, bucketS, bucketH, days, tsOf, ev, complete: false, inflowByHour: sel === "1" };
 
     // Resume rather than give up. A rate limit is temporary, so each pass picks up
     // exactly where the last one stopped and the charts grow backwards as it goes.
@@ -2049,18 +2261,18 @@ async function loadStats() {
     const s2 = STATS.series;
     statsSay((s2 && s2.complete
         ? `Covering ${spanTxt(days)}${gen > 0 && start <= gen + bucketS ? " — the whole life of the protocol" : ""} at ${bucketH === 24 ? "1-day" : bucketH === 1 ? "hourly" : bucketH + "-hour"} intervals. `
-        : `Stopped at ${s2 && s2.short != null ? spanTxt(s2.short) : "a partial window"} of ${spanTxt(days)} — press Refresh to continue. `) +
+        : `Stopped at ${s2 && s2.short != null ? spanTxt(s2.short) : "a partial window"} of ${spanTxt(days)} — press Reload charts to continue. `) +
       `${all.length.toLocaleString()} events over ${(toBlock - Math.max(fromBlock, cursor + 1) + 1).toLocaleString()} blocks` +
       (s2 && s2.negative ? " · the pooled line went below zero going backwards, so some ETH arrived by a route that emits no event — only the reconstructed past is affected, the latest point is read directly" : ""));
 
   } catch (e) {
     statsSay(isTransient(e)
-      ? "The RPC stopped responding — it rate limits, and a long scan can trip it. Press Refresh to pick up again, or choose a shorter window."
+      ? "The RPC stopped responding — it rate limits, and a long scan can trip it. Press Reload charts to pick up again, or choose a shorter window."
       : "Could not load history: " + explain(e));
   } finally {
     STATS.busy = false;
     hideProgress(bar);
-    if (rbtn) { rbtn.disabled = false; rbtn.textContent = "Refresh"; }
+    if (rbtn) { rbtn.disabled = false; rbtn.textContent = STATS.series ? "Reload charts" : "Load charts"; }
   }
 }
 
@@ -2087,15 +2299,106 @@ function svgLine(points, opts) {
   const firstT = points[0].t, lastT = points[points.length - 1].t;
   const lbl = ts => new Date(ts * 1000).toLocaleString(undefined,
     opts.bucketH >= 24 ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", hour: "2-digit" });
+  const lblLong = ts => new Date(ts * 1000).toLocaleString(undefined,
+    opts.bucketH >= 24
+      ? { weekday: "short", month: "short", day: "numeric" }
+      : { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img" aria-label="${opts.label}">
-    ${grid}
-    <polygon points="${area}" fill="${opts.color}" opacity="0.10"/>
-    <polyline points="${line}" fill="none" stroke="${opts.color}" stroke-width="1.8"/>
-    <circle cx="${x(points.length - 1).toFixed(1)}" cy="${y(points[points.length - 1].v).toFixed(1)}" r="3.5" fill="${opts.color}"/>
-    <text x="${padL}" y="${H - 8}" fill="#bcc7be" font-size="11" font-family="Courier New,monospace">${lbl(firstT)}</text>
-    <text x="${W - padR}" y="${H - 8}" fill="#bcc7be" font-size="11" text-anchor="end" font-family="Courier New,monospace">${lbl(lastT)}</text>
-  </svg>`;
+  /* One band per reading, each holding the crosshair and marker for its own point.
+     Showing them on :hover of the band keeps the whole thing in CSS — no per-frame
+     JS, and it survives the chart being rebuilt after every scan pass. */
+  const step = points.length > 1 ? (W - padL - padR) / (points.length - 1) : (W - padL - padR);
+  const hover = points.map((p, i) => {
+    const cx = x(i), cy = y(p.v);
+    const bx = Math.max(padL, cx - step / 2);
+    const bw = Math.min(W - padR, cx + step / 2) - bx;
+    const readout = `${(opts.fmtFull || opts.fmt)(p.v)}${opts.unit ? " " + opts.unit : ""}${p.usd ? " · " + p.usd : ""}`;
+    return `<g class="hovg">
+      <line class="xh" x1="${cx.toFixed(1)}" y1="${padT}" x2="${cx.toFixed(1)}" y2="${(H - padB).toFixed(1)}" stroke="${opts.color}" stroke-width="1" stroke-opacity="0.5"/>
+      <circle class="xh" cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="4" fill="${opts.color}"/>
+      <rect class="charthit" x="${bx.toFixed(1)}" y="${padT}" width="${Math.max(1, bw).toFixed(1)}" height="${(H - padT - padB).toFixed(1)}"
+        data-day="${lblLong(p.t)}" data-val="${readout}"></rect>
+    </g>`;
+  }).join("");
+
+  return `<div class="chartwrap">
+    <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img" aria-label="${opts.label}">
+      ${grid}
+      <polygon points="${area}" fill="${opts.color}" opacity="0.10"/>
+      <polyline points="${line}" fill="none" stroke="${opts.color}" stroke-width="1.8"/>
+      <circle cx="${x(points.length - 1).toFixed(1)}" cy="${y(points[points.length - 1].v).toFixed(1)}" r="3.5" fill="${opts.color}"/>
+      ${hover}
+      <text x="${padL}" y="${H - 8}" fill="#bcc7be" font-size="11" font-family="Courier New,monospace">${lbl(firstT)}</text>
+      <text x="${W - padR}" y="${H - 8}" fill="#bcc7be" font-size="11" text-anchor="end" font-family="Courier New,monospace">${lbl(lastT)}</text>
+    </svg>
+    <div class="chart-tip" hidden></div>
+  </div>`;
+}
+
+/* Columns, not a line. A bucket total is a discrete quantity for its window —
+   nothing sits between one day and the next for a line to pass through. Bars are
+   anchored to a zero baseline for the same reason: the height is the amount. */
+function svgBars(points, opts) {
+  const W = 660, H = 190, padL = 62, padR = 14, padT = 14, padB = 30;
+  const vals = points.map(p => (isFinite(p.v) && p.v > 0 ? p.v : 0));
+  if (!vals.length) return `<div class="empty">No data.</div>`;
+  const peak = Math.max(...vals);
+  const hi = peak > 0 ? peak * 1.08 : 1;        // headroom so the tallest column clears the top rule
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const base = padT + plotH;
+  const slot = plotW / points.length;
+  // 2px surface gap, never eating a thin column — and capped, because a handful of
+  // days spread over the full width reads as slabs rather than as a measurement
+  const bw = Math.min(46, Math.max(1, slot - Math.min(2, slot * 0.3)));
+  const y = v => padT + (1 - v / hi) * plotH;
+
+  const grid = [0, .25, .5, .75, 1].map(f => {
+    const v = hi * (1 - f), yy = y(v);
+    return `<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${W - padR}" y2="${yy.toFixed(1)}" stroke="#35453b" stroke-dasharray="2 4"/>
+            <text x="${padL - 8}" y="${(yy + 4).toFixed(1)}" fill="#bcc7be" font-size="11" text-anchor="end" font-family="Courier New,monospace">${opts.fmt(v)}</text>`;
+  }).join("");
+
+  // an hourly window spans two dates, so the hour alone would not say which day
+  const lbl = ts => new Date(ts * 1000).toLocaleString(undefined,
+    opts.hourly ? { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }
+                : { month: "short", day: "numeric" });
+  const lblLong = ts => new Date(ts * 1000).toLocaleString(undefined,
+    opts.hourly ? { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }
+                : { weekday: "short", month: "short", day: "numeric" });
+
+  // square at the baseline, rounded at the top: the flat foot is what makes the
+  // height readable as a quantity
+  const bars = points.map((p, i) => {
+    const v = isFinite(p.v) && p.v > 0 ? p.v : 0;
+    const x = padL + i * slot + (slot - bw) / 2;
+    const top = y(v), h = base - top;
+    const r = Math.min(4, bw / 2, h);
+    // a day still filling up is drawn faint, so a short last bar reads as
+    // unfinished rather than as a collapse in activity
+    const shape = h <= 0
+      ? ""
+      : `<path d="M${x.toFixed(1)},${base.toFixed(1)} L${x.toFixed(1)},${(top + r).toFixed(1)}
+           Q${x.toFixed(1)},${top.toFixed(1)} ${(x + r).toFixed(1)},${top.toFixed(1)}
+           L${(x + bw - r).toFixed(1)},${top.toFixed(1)}
+           Q${(x + bw).toFixed(1)},${top.toFixed(1)} ${(x + bw).toFixed(1)},${(top + r).toFixed(1)}
+           L${(x + bw).toFixed(1)},${base.toFixed(1)} Z" fill="${opts.color}"${p.partial ? ' opacity="0.45"' : ""}/>`;
+    // the hit area is the whole column slot, not just the drawn bar: a zero day is
+    // still hoverable, and there is no dead gap between one day and the next
+    const readout = `${(opts.fmtFull || opts.fmt)(v)}${opts.unit ? " " + opts.unit : ""}${p.usd ? " · " + p.usd : ""}`;
+    return `<g>${shape}<rect class="charthit col" x="${(padL + i * slot).toFixed(1)}" y="${padT}" width="${slot.toFixed(1)}" height="${plotH.toFixed(1)}" ` +
+      `data-day="${lblLong(p.t)}" data-val="${readout}"${p.partial ? ' data-partial="1"' : ""}></rect></g>`;
+  }).join("");
+
+  return `<div class="chartwrap">
+    <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img" aria-label="${opts.label}">
+      ${grid}
+      <line x1="${padL}" y1="${base.toFixed(1)}" x2="${W - padR}" y2="${base.toFixed(1)}" stroke="#35453b"/>
+      ${bars}
+      <text x="${padL}" y="${H - 8}" fill="#bcc7be" font-size="11" font-family="Courier New,monospace">${lbl(points[0].t)}</text>
+      <text x="${W - padR}" y="${H - 8}" fill="#bcc7be" font-size="11" text-anchor="end" font-family="Courier New,monospace">${lbl(points[points.length - 1].t)}</text>
+    </svg>
+    <div class="chart-tip" hidden></div>
+  </div>`;
 }
 
 function renderStats() {
@@ -2112,6 +2415,8 @@ function renderStats() {
     if (v >= 1e3) return (v / 1e3).toFixed(1) + "K";
     return v.toFixed(0);
   };
+  // the axis is compact for room; a hover has space for the real number
+  const exact = v => v.toLocaleString(undefined, { maximumFractionDigits: v < 1 ? 4 : 0 });
   const pts = (arr, conv) => s.edges.map((t, i) => ({ t, v: conv(arr[i]) }));
   const mSym = S.L.moreSymbol || "MORE", mDec = S.L.moreDecimals ?? 18;
 
@@ -2128,10 +2433,32 @@ function renderStats() {
   // MORE is sent to a dead address rather than destroyed, so its supply is unchanged.
   const morePct = pctOf(S.burners.more?.burnt, S.L.moreSupply);
 
+  const days = s.inflowDays || [];
+  const perHour = !!s.inflowByHour;
+  const unitWord = perHour ? "hour" : "day";
+  const inflowTotal = days.reduce((a, d) => a + d.v, 0n);
+  const wholeUnits = days.filter(d => !d.partial);
+  const busiest = wholeUnits.length ? wholeUnits.reduce((a, b) => (b.v > a.v ? b : a)) : null;
+  const busiestWhen = busiest
+    ? new Date(busiest.t * 1000).toLocaleString(undefined,
+        perHour ? { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }
+                : { month: "short", day: "numeric" })
+    : null;
+
   const charts = [
+    { title: `ETH into the protocol per ${unitWord}`,
+      sub: `Every fee that arrived that ${unitWord} — mints, claims, and anything sent straight to the fund. ` +
+           `Gross arrivals, counted before burns or sweeps spend any of it. ` +
+           `<strong>${fmtEth(inflowTotal)}</strong> over the window scanned` +
+           (busiest ? `, the busiest ${unitWord} being ${busiestWhen} at ${fmtEth(busiest.v)}` : "") +
+           `. Faded bars are ${unitWord}s the window only partly covers, the current one included.`,
+      p: days.map(d => ({ t: d.t, v: toEth(d.v), partial: d.partial, usd: usdPlain(d.v) })),
+      color: "#96c99c", bars: true, unit: "ETH", hourly: perHour,
+      fmt: v => v >= 1 ? v.toFixed(2) : v >= 0.01 ? v.toFixed(3) : v.toFixed(4) },
     { title: "Pooled in burn contracts and the fund",
       sub: "Both burn pools, the pump fund, and fees not yet split, as one figure. It rises as mint fees arrive and falls as burns spend it.",
-      p: pts(s.pooledSeries, toEth), color: "#96c99c",
+      p: s.edges.map((t, i) => ({ t, v: toEth(s.pooledSeries[i]), usd: usdPlain(s.pooledSeries[i]) })),
+      color: "#96c99c", unit: "ETH",
       fmt: v => v >= 1 ? v.toFixed(3) : v.toFixed(4), zeroFloor: false },
     { title: "Global rank",
       sub: "One step per mint opened, across every wallet. This is what drives the reward on every position.",
@@ -2141,20 +2468,23 @@ function renderStats() {
       sub: `Cumulative ${S.K.symbol} bought back and destroyed by the protocol.` +
            (fuelPct ? ` <strong>${fuelPct}</strong> of every ${S.K.symbol} ever minted has been burned.` : ""),
       p: pts(s.fuelBurnedSeries, v => tok(v, S.K.decimals)), color: "#b2e5ba",
-      fmt: compact, zeroFloor: false },
+      fmt: compact, fmtFull: exact, unit: S.K.symbol, zeroFloor: false },
     { title: `${mSym} burned by this protocol`,
       sub: `Cumulative ${mSym} bought with ${S.K.symbol} mint fees and sent to the dead address.` +
            (morePct ? ` That is <strong>${morePct}</strong> of the ${mSym} supply, which is unchanged because the tokens are parked rather than destroyed.` : ""),
       p: pts(s.moreByFuelSeries, v => tok(v, mDec)), color: "#e0b358",
-      fmt: compact, zeroFloor: false }
+      fmt: compact, fmtFull: exact, unit: mSym, zeroFloor: false }
   ];
 
-  host.innerHTML = charts.map(c => `
+  host.innerHTML = charts.map(c => {
+    const opts = { fmt: c.fmt, fmtFull: c.fmtFull, color: c.color, label: c.title, bucketH: s.bucketH, zeroFloor: c.zeroFloor, unit: c.unit, hourly: c.hourly };
+    return `
     <div class="panel">
       <h3>${c.title}</h3>
       <p class="note">${c.sub}</p>
-      ${svgLine(c.p, { fmt: c.fmt, color: c.color, label: c.title, bucketH: s.bucketH, zeroFloor: c.zeroFloor })}
-    </div>`).join("") + `<div id="recentHost"></div>`;
+      ${c.bars ? svgBars(c.p, opts) : svgLine(c.p, opts)}
+    </div>`;
+  }).join("") + `<div id="recentHost"></div>`;
   renderRecent();
 }
 
@@ -2183,7 +2513,7 @@ function renderRecent() {
         <div class="when">${r.count.toLocaleString()} mint${r.count === 1 ? "" : "s"}${r.reopen ? " reopened" : ""}</div>
         <div class="meta">${link(r.user)} · ${r.term}-day term · ${ago}</div>
       </div>
-      <div class="amt">${r.fee != null ? fmtEth(r.fee) + usdSuffix(r.fee) : "—"}
+      <div class="amt">${r.fee != null ? fmtEth(r.fee) : "—"}
         <small>${r.fee != null ? "fee paid" : "reopened"}</small></div>
     </div>`;
   }).join("");
@@ -2194,6 +2524,254 @@ function renderRecent() {
   </div>`;
 }
 
+
+/* ======================= top pending balances ======================= */
+/* Two phases, because no contract lists holders. The batch minter's events name
+   every wallet that has ever opened a mint; each of those is then read with the
+   same function the positions tab uses, so the figures are identical by
+   construction rather than by a second implementation agreeing with the first. */
+const TOP = { busy: false, abort: false, rows: null, scanned: 0, total: 0, complete: false };
+const TOP_SHOWN = 25;
+
+function topSay(msg) { const n = $("#topMsg"); if (n) n.textContent = msg; }
+
+async function loadTopHolders() {
+  if (TOP.busy) return;
+  TOP.busy = true;
+  TOP.abort = false;
+  const bar = $("#topBar"), btn = $("#btnTopLoad");
+  if (btn) { btn.disabled = true; btn.textContent = "Loading…"; }
+  try {
+    renderProgress(bar, 0);
+    topSay("Locating the starting block…");
+    const gen = Number(S.L.tokenGenesis ?? 0);
+    const fromBlock = await blockAtTime(gen > 0 ? gen : chainNow() - 30 * 86400);
+    const toBlock = await rpcRetry(p => p.getBlockNumber());
+
+    const opened = I.batch.getEvent("BatchRankClaimed");
+    const reopened = I.batch.getEvent("BatchClaimedAndReminted");
+    if (!opened || !reopened) throw new Error("The batch minter ABI is missing its mint events.");
+    const topics = [[opened.topicHash, reopened.topicHash]];
+
+    /* Phase one: who has ever opened a mint. Resumes on rate limits the same way
+       the charts do, so a long scan is interrupted rather than lost. */
+    const owners = new Map();
+    let cursor = toBlock, pass = 0;
+    const totalBlocks = toBlock - fromBlock + 1;
+    let scanComplete = false;
+    while (cursor >= fromBlock && !TOP.abort) {
+      const res = await scanLogs(fromBlock, cursor, [A.batchMinter], topics, (done) => {
+        const scanned = toBlock - cursor + done;
+        const pct = Math.min(100, Math.round(scanned / totalBlocks * 100));
+        renderProgress(bar, Math.round(pct * 0.4));            // the scan is the first 40%
+        topSay(`Finding holders… ${pct}% of the chain · ${owners.size} found`);
+      });
+      for (const lg of res.logs) {
+        try {
+          const pl = I.batch.parseLog(lg);
+          const u = pl.args[0];
+          if (u) owners.set(u.toLowerCase(), (owners.get(u.toLowerCase()) || 0) + Number(pl.args[2] || 0));
+        } catch (_) {}
+      }
+      cursor = res.coveredFrom - 1;
+      scanComplete = res.complete || cursor < fromBlock;
+      if (scanComplete) break;
+      pass++;
+      if (pass > 25) break;
+      const wait = Math.min(15, 3 + pass);
+      for (let k = wait; k > 0 && !TOP.abort; k--) {
+        topSay(`Rate limited while finding holders — resuming in ${k}s. ${owners.size} found so far.`);
+        renderProgress(bar, null);
+        await sleep(1000);
+      }
+    }
+
+    if (!owners.size) {
+      TOP.rows = [];
+      topSay("No mint events found in the window scanned.");
+      renderTopHolders();
+      return;
+    }
+
+    /* Phase two: read each wallet. Heaviest wallets first, so the names that will
+       top the list are known early and the board is useful before it finishes. */
+    const list = [...owners.entries()].sort((a, b) => b[1] - a[1]).map(e => e[0]);
+    TOP.total = list.length;
+    const rows = [];
+    for (let i = 0; i < list.length && !TOP.abort; i++) {
+      try {
+        const d = await fetchMintsFor(list[i]);
+        const f = pendingFuel(d);
+        if (f.all.length) {
+          rows.push({
+            address: list[i], pending: f.pending, mints: f.all.length,
+            positions: f.positionCount, overdue: f.overdue, nextUnlock: f.nextUnlock,
+            partial: !d.rankKnown
+          });
+        }
+      } catch (e) {
+        if (!isTransient(e)) console.warn("[top] skipped " + list[i], e);
+      }
+      TOP.scanned = i + 1;
+      renderProgress(bar, 40 + Math.round((i + 1) / list.length * 60));
+      topSay(`Reading positions… ${i + 1} of ${list.length} wallets`);
+      rows.sort((a, b) => (b.pending > a.pending ? 1 : b.pending < a.pending ? -1 : 0));
+      TOP.rows = rows.slice();
+      renderTopHolders();
+    }
+
+    TOP.complete = scanComplete && !TOP.abort;
+    const held = rows.reduce((a, r) => a + r.pending, 0n);
+    topSay(
+      (TOP.complete
+        ? `${rows.length.toLocaleString()} wallets hold open mints`
+        : `Stopped early — ${rows.length.toLocaleString()} of the wallets found were read`) +
+      `, ${fmtTok(held, S.K.decimals, S.K.symbol)} pending between them. ` +
+      (scanComplete ? "" : "The event scan did not reach the protocol's start, so a holder may be missing. ") +
+      "Penalties on overdue mints are already taken off.");
+
+  } catch (e) {
+    topSay(isTransient(e)
+      ? "The RPC stopped responding — it rate limits, and this reads a lot. Press Load list to try again."
+      : "Could not build the list: " + explain(e));
+  } finally {
+    TOP.busy = false;
+    hideProgress(bar);
+    if (btn) { btn.disabled = false; btn.textContent = TOP.rows ? "Reload list" : "Load list"; }
+  }
+}
+
+function renderTopHolders() {
+  const host = $("#topList");
+  if (!host) return;
+  const rows = TOP.rows;
+  if (!rows) { host.innerHTML = ""; return; }
+  if (!rows.length) { host.innerHTML = `<div class="empty">No wallet holds an open mint.</div>`; return; }
+
+  const now = chainNow();
+  const top = rows.slice(0, TOP_SHOWN);
+  const mine = S.account ? S.account.toLowerCase() : null;
+
+  host.innerHTML = top.map((r, i) => {
+    const isMine = mine && r.address.toLowerCase() === mine;
+    const when = r.overdue
+      ? `${r.overdue} past unlock`
+      : r.nextUnlock ? `unlocks in ${fmtDur(r.nextUnlock - now)}` : "—";
+    return `<div class="pos${r.overdue ? " late" : ""}">
+      <div class="idx">${i + 1}</div>
+      <div>
+        <div class="when">${link(r.address)}${isMine ? ` <span class="pill safe">you</span>` : ""}</div>
+        <div class="meta">${r.mints.toLocaleString()} mint${r.mints === 1 ? "" : "s"} in ${r.positions.toLocaleString()} position${r.positions === 1 ? "" : "s"} · ${when}${r.partial ? " · projection unavailable" : ""}</div>
+      </div>
+      <div class="amt">${fmtTok(r.pending, S.K.decimals, S.K.symbol)}
+        <small>pending</small></div>
+    </div>`;
+  }).join("") +
+  (rows.length > TOP_SHOWN ? `<div class="derived" style="margin-top:10px">Showing the top ${TOP_SHOWN} of ${rows.length.toLocaleString()} wallets holding open mints.</div>` : "");
+}
+
+
+/* ======================= recent staking ======================= */
+const STAKE_FEED = { busy: false, rows: null };
+
+async function loadStakeFeed() {
+  if (STAKE_FEED.busy) return;
+  STAKE_FEED.busy = true;
+  const bar = $("#stakeFeedBar"), btn = $("#btnStakeFeed");
+  const say = m => { const n = $("#stakeFeedMsg"); if (n) n.textContent = m; };
+  if (btn) { btn.disabled = true; btn.textContent = "Loading…"; }
+  renderProgress(bar, null);
+  try {
+    const stakedTopic = I.token.getEvent("Staked");
+    const withdrawnTopic = I.token.getEvent("Withdrawn");
+    if (!stakedTopic || !withdrawnTopic) throw new Error("Staked/Withdrawn are missing from the embedded token ABI");
+    const topics = [[stakedTopic.topicHash, withdrawnTopic.topicHash]];
+
+    const head = await rpcRetry(p => p.getBlockNumber());
+    const WANT = 20;
+    const logs = [];
+    let hi = head, span = 600000, passes = 0, fails = 0, lowest = head;
+
+    // stop as soon as there are enough, rather than covering a fixed window
+    while (logs.length < WANT && passes < 10 && hi > 0) {
+      const lo = Math.max(0, hi - span + 1);
+      try {
+        const entry = pickEndpoint(true);
+        await pace(entry);
+        const got = await entry.provider.getLogs({ address: A.token, topics, fromBlock: lo, toBlock: hi });
+        logs.push(...got);
+        lowest = lo;
+        hi = lo - 1;
+        passes++;
+        fails = 0;
+        say(`Scanning… ${logs.length} found`);
+        renderProgress(bar, Math.min(95, Math.round(logs.length / WANT * 100)));
+      } catch (e) {
+        fails++;
+        if (isTransient(e)) { if (fails > 5) break; await sleep(400 * fails); }
+        else if (span > 20000) span = Math.floor(span / 2);
+        else break;
+      }
+    }
+
+    if (!logs.length) { STAKE_FEED.rows = []; say("Nothing found in the blocks scanned."); renderStakeFeed(); return; }
+
+    renderProgress(bar, null);
+    say("Mapping blocks to time…");
+    const tsOf = await buildTimeMap(lowest, head);
+
+    const rows = [];
+    for (const lg of logs) {
+      try {
+        const pl = I.token.parseLog(lg);
+        rows.push({
+          block: lg.blockNumber,
+          t: tsOf(lg.blockNumber),
+          user: pl.args[0],
+          kind: pl.name === "Staked" ? "stake" : "withdraw",
+          amount: pl.args[1],
+          term: pl.name === "Staked" ? Number(pl.args[2]) : null,
+          reward: pl.name === "Withdrawn" ? pl.args[2] : null
+        });
+      } catch (_) {}
+    }
+    rows.sort((a, b) => b.block - a.block);
+    rows.length = Math.min(rows.length, WANT);
+    STAKE_FEED.rows = rows;
+    say(`${rows.length} most recent, over ${(head - lowest + 1).toLocaleString()} blocks.`);
+    renderStakeFeed();
+  } catch (e) {
+    $("#stakeFeedMsg").textContent = isTransient(e)
+      ? "The RPCs are rate limiting. Press Load to try again."
+      : "Could not load: " + explain(e);
+  } finally {
+    STAKE_FEED.busy = false;
+    hideProgress(bar);
+    if (btn) { btn.disabled = false; btn.textContent = STAKE_FEED.rows ? "Reload" : "Load"; }
+  }
+}
+
+function renderStakeFeed() {
+  const host = $("#stakeFeed");
+  if (!host) return;
+  const rows = STAKE_FEED.rows;
+  if (!rows) { host.innerHTML = ""; return; }
+  if (!rows.length) { host.innerHTML = `<div class="empty">Nothing found.</div>`; return; }
+  const now = chainNow();
+  host.innerHTML = rows.map(r => {
+    const ago = r.t != null ? fmtDur(now - Math.round(r.t)) : "—";
+    const isStake = r.kind === "stake";
+    return `<div class="pos${isStake ? " due" : ""}">
+      <div class="idx">${isStake ? "+" : "\u2192"}</div>
+      <div>
+        <div class="when">${isStake ? "Staked" : "Withdrew"} ${fmtTok(r.amount, S.K.decimals, S.K.symbol)}</div>
+        <div class="meta">${link(r.user)} · ${isStake ? `${r.term}-day term` : `reward ${fmtTok(r.reward, S.K.decimals, S.K.symbol)}`} · ${ago}</div>
+      </div>
+      <div class="amt">${isStake ? "" : fmtTok((r.amount ?? 0n) + (r.reward ?? 0n), S.K.decimals, S.K.symbol)}
+        <small>${isStake ? "" : "returned"}</small></div>
+    </div>`;
+  }).join("");
+}
 
 /* ======================= actions ======================= */
 
@@ -2209,15 +2787,50 @@ async function fuelPerEth() {
 }
 
 let ETH_USD = null;
-async function fetchEthUsd() {
-  if (ETH_USD !== null) return ETH_USD;
+
+/* A dollar figure now sits beside every ETH amount, so a price arriving has to
+   repaint the whole page rather than the three panels that used to carry one. */
+function repaintPrices() {
+  renderAll();
+  try { renderPositions(); } catch (e) { console.warn("[price] repaint failed:", e); }
+  if (STATS.series) { try { renderStats(); } catch (e) { console.warn("[price] repaint failed:", e); } }
+  Promise.resolve().then(quoteMint).catch(() => {});   // re-quotes, so it is async
+}
+
+/* Retried, and refreshed on a timer. One missed request used to leave every ETH
+   figure on the page without its dollar value for the rest of the session. */
+async function fetchEthUsd(retry = 0) {
   try {
     const r = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd", { cache: "no-store" });
     const j = await r.json();
-    ETH_USD = Number(j?.ethereum?.usd) || null;
-    if (ETH_USD) { renderProtocolStats(); renderHeroStats(); renderRecent(); }
-  } catch (_) { ETH_USD = null; }
+    const v = Number(j?.ethereum?.usd) || null;
+    if (v) {
+      if (v !== ETH_USD) { ETH_USD = v; repaintPrices(); }
+      return v;
+    }
+  } catch (_) {}
+  if (retry < 3) setTimeout(() => fetchEthUsd(retry + 1), 15000 * (retry + 1));
   return ETH_USD;
+}
+
+/* What a wallet's open mints would pay out, penalties on the overdue ones taken
+   off. One definition, so the leaderboard and the positions tab cannot drift. */
+function pendingFuel(d) {
+  const now = chainNow();
+  const all = d.soloMint ? [...d.positions, d.soloMint] : d.positions;
+  const known = all.filter(p => p.gross != null);
+  const pending = known.reduce((a, p) => {
+    const late = now - Number(p.maturityTs);
+    return a + (late > 0 ? netAfterPenalty(p.gross, late) : p.gross);
+  }, 0n);
+  return {
+    all, known, pending,
+    positionCount: groupBatches(d.positions).length + (d.soloMint ? 1 : 0),
+    overdue: all.filter(p => Number(p.maturityTs) <= now).length,
+    nextUnlock: all.length
+      ? Math.min(...all.map(p => Number(p.maturityTs)))
+      : null
+  };
 }
 
 async function renderWalletStats(sel, d) {
@@ -2225,16 +2838,8 @@ async function renderWalletStats(sel, d) {
   if (!host) return;
   if (!d) { host.innerHTML = ""; return; }
 
-  const now = chainNow();
-  const all = d.soloMint ? [...d.positions, d.soloMint] : d.positions;
   const batches = groupBatches(d.positions);
-  const positionCount = batches.length + (d.soloMint ? 1 : 0);
-
-  const known = all.filter(p => p.gross != null);
-  const pending = known.reduce((a, p) => {
-    const late = now - Number(p.maturityTs);
-    return a + (late > 0 ? netAfterPenalty(p.gross, late) : p.gross);
-  }, 0n);
+  const { all, known, pending, positionCount } = pendingFuel(d);
 
   host.innerHTML = `<div class="grid2">
     <div>${statRow("Active positions", positionCount.toLocaleString())}
@@ -2266,7 +2871,7 @@ async function renderWalletStats(sel, d) {
     if (q && known.length) valueWei = pending * (10n ** 18n) / q;
   } catch (_) {}
   await fetchEthUsd();
-  if (valNode) valNode.innerHTML = valueWei != null ? fmtEth(valueWei) + usdSuffix(valueWei)
+  if (valNode) valNode.innerHTML = valueWei != null ? fmtEth(valueWei)
     : `<span class="addr">no price available</span>`;
 
   if (roiNode) {
@@ -2295,7 +2900,7 @@ async function doLookup() {
   renderProgress($("#lookupBar"), null);
   try {
     openLookup.clear();
-    LOOKUP = await fetchMintsFor(addr);
+    LOOKUP = await fetchMintsFor(addr, "#lookupBar");
     renderLookup();
   } catch (e) {
     LOOKUP = null;
@@ -2454,35 +3059,102 @@ async function doDistribute() {
 }
 
 /* ======================= wiring up the page ======================= */
-$$("nav.tabs button").forEach(b => b.onclick = () => {
-  $$("nav.tabs button").forEach(x => x.setAttribute("aria-selected", String(x === b)));
-  $$("section.tab").forEach(s => s.classList.toggle("on", s.id === "tab-" + b.dataset.tab));
-  if (b.dataset.tab === "stats" && !STATS.series && !STATS.busy) loadStats();
-});
+/* Bind tolerantly. A handler assigned straight onto a missing element throws, and
+   because this block runs before boot(), one bad selector used to stop the whole
+   page from starting — no timers, no render, every panel left as static markup. */
+function on(sel, ev, fn) {
+  const n = $(sel);
+  if (!n) { console.warn("[bind] element not found: " + sel); return; }
+  n.addEventListener(ev, fn);
+}
 
-$("#btnConnect").onclick = connect;
-(() => {
+try {
+  $$("nav.tabs button").forEach(b => b.addEventListener("click", () => {
+    $$("nav.tabs button").forEach(x => x.setAttribute("aria-selected", String(x === b)));
+    $$("section.tab").forEach(sec => sec.classList.toggle("on", sec.id === "tab-" + b.dataset.tab));
+  }));
+
   const node = $("#donateAddr");
-  if (node) {
-    node.innerHTML = `${DONATE} <a href="${CHAIN.explorer}/address/${DONATE}" target="_blank" rel="noopener">explorer</a>`;
-  }
-})();
+  if (node) node.textContent = DONATE;
 
-$("#btnCopyDonate").onclick = async () => {
-  try {
-    await navigator.clipboard.writeText(DONATE);
-    toast("Address copied.", "ok");
-  } catch (_) {
-    // clipboard access is blocked on some setups, including plain file:// pages
-    const r = document.createRange();
-    r.selectNodeContents($("#donateAddr"));
-    const sel = getSelection();
-    sel.removeAllRanges();
-    sel.addRange(r);
-    toast("Couldn't reach the clipboard — the address is selected, press Ctrl+C.");
-  }
-};
+  on("#btnConnect", "click", connect);
 
+  /* Delegated, because the charts are rebuilt wholesale after every scan pass and
+     any handler bound to a bar would be thrown away with it. */
+  on("#statsCharts", "pointermove", e => {
+    const hit = e.target.closest?.(".charthit");
+    const wrap = hit && hit.closest(".chartwrap");
+    const tip = wrap && wrap.querySelector(".chart-tip");
+    // every other tip goes first: moving straight from one chart into the next
+    // would otherwise leave the one behind it still showing
+    $$("#statsCharts .chart-tip").forEach(t => { if (t !== tip) t.hidden = true; });
+    if (!tip) return;
+    tip.innerHTML = `${hit.dataset.day}<span class="v">${hit.dataset.val}</span>` +
+      (hit.dataset.partial ? `<span class="part">still counting</span>` : "");
+    const box = wrap.getBoundingClientRect();
+    tip.style.left = Math.round(e.clientX - box.left) + "px";
+    tip.style.top = Math.round(e.clientY - box.top) + "px";
+    tip.hidden = false;
+  });
+  on("#statsCharts", "pointerleave", () => {
+    $$("#statsCharts .chart-tip").forEach(t => { t.hidden = true; });
+  });
+
+  on("#btnCopyDonate", "click", async () => {
+    try {
+      await navigator.clipboard.writeText(DONATE);
+      toast("Address copied.", "ok");
+    } catch (_) {
+      // clipboard access is blocked on some setups, including plain file:// pages
+      const r = document.createRange();
+      r.selectNodeContents($("#donateAddr"));
+      const sel = getSelection();
+      sel.removeAllRanges();
+      sel.addRange(r);
+      toast("Couldn't reach the clipboard — the address is selected, press Ctrl+C.");
+    }
+  });
+
+  on("#btnStatsRefresh", "click", restartStats);
+  on("#btnTopLoad", "click", restartTopHolders);
+  on("#statsRange", "change", () => {
+    // changing the window invalidates what is drawn, but does not start a new scan
+    STATS.series = null;
+    renderStats();
+    statsSay("Window changed. Press Load charts to scan it.");
+  });
+
+  on("#btnStakeFeed", "click", loadStakeFeed);
+  on("#btnLookup", "click", doLookup);
+  on("#lookupAddr", "keydown", e => { if (e.key === "Enter") doLookup(); });
+  on("#btnReload", "click", () => loadUser().catch(e => toast(explain(e), "err")));
+  on("#onlyClaimable", "change", renderPositions);
+  on("#btnMint", "click", doMint);
+  on("#btnStake", "click", doStake);
+  on("#btnMaxCount", "click", () => { $("#mintCount").value = Number(S.K.MAX_BATCH ?? 50n); quoteMint(); });
+  on("#btnStakeMax", "click", () => { $("#stakeAmt").value = E.formatUnits(S.balance, S.K.decimals); projectStake(); });
+
+  on("#mintTerm", "input", e => { $("#mintTermNum").value = e.target.value; quoteMint(); });
+  on("#mintTermNum", "input", e => { $("#mintTerm").value = e.target.value; quoteMint(); });
+  // clamp on change rather than on every keystroke, so typing "30" isn't fought at "3"
+  on("#mintTermNum", "change", e => {
+    const v = clampTerm(e.target.value, minTermDays(), maxMintTermDays());
+    e.target.value = v; $("#mintTerm").value = v; quoteMint();
+  });
+  on("#mintCount", "change", e => {
+    e.target.value = clampTerm(e.target.value, 1, Number(S.K.MAX_BATCH ?? 50n));
+    quoteMint();
+  });
+  on("#stakeTerm", "change", e => {
+    e.target.value = clampTerm(e.target.value, minTermDays(), maxStakeTermDays());
+    projectStake();
+  });
+  on("#mintCount", "input", quoteMint);
+  on("#stakeAmt", "input", projectStake);
+  on("#stakeTerm", "input", projectStake);
+} catch (e) {
+  console.error("[bind] wiring failed:", e);
+}
 
 async function restartStats() {
   if (STATS.busy) {                 // stop the resume loop, then start fresh
@@ -2494,43 +3166,52 @@ async function restartStats() {
   renderStats();
   loadStats();
 }
-$("#btnStatsRefresh").onclick = restartStats;
-$("#statsRange").onchange = restartStats;
-$("#btnLookup").onclick = doLookup;
-$("#lookupAddr").addEventListener("keydown", e => { if (e.key === "Enter") doLookup(); });
-$("#btnReload").onclick = () => loadUser().catch(e => toast(explain(e), "err"));
-$("#onlyClaimable").onchange = renderPositions;
-$("#btnMint").onclick = doMint;
-$("#btnStake").onclick = doStake;
-$("#btnMaxCount").onclick = () => { $("#mintCount").value = Number(S.K.MAX_BATCH ?? 50n); quoteMint(); };
-$("#btnStakeMax").onclick = () => { $("#stakeAmt").value = E.formatUnits(S.balance, S.K.decimals); projectStake(); };
 
-$("#mintTerm").oninput = e => { $("#mintTermNum").value = e.target.value; quoteMint(); };
-$("#mintTermNum").oninput = e => { $("#mintTerm").value = e.target.value; quoteMint(); };
-// clamp on change rather than on every keystroke, so typing "30" isn't fought at "3"
-$("#mintTermNum").onchange = e => {
-  const v = clampTerm(e.target.value, minTermDays(), maxMintTermDays());
-  e.target.value = v; $("#mintTerm").value = v; quoteMint();
-};
-$("#mintCount").onchange = e => {
-  e.target.value = clampTerm(e.target.value, 1, Number(S.K.MAX_BATCH ?? 50n));
-  quoteMint();
-};
-$("#stakeTerm").onchange = e => {
-  e.target.value = clampTerm(e.target.value, minTermDays(), maxStakeTermDays());
-  projectStake();
-};
-$("#mintCount").oninput = quoteMint;
-$("#stakeAmt").oninput = projectStake;
-$("#stakeTerm").oninput = projectStake;
+async function restartTopHolders() {
+  if (TOP.busy) {                   // same contract as the charts: stop, then start fresh
+    TOP.abort = true;
+    topSay("Stopping…");
+    for (let i = 0; i < 40 && TOP.busy; i++) await sleep(150);
+  }
+  TOP.rows = null;
+  renderTopHolders();
+  loadTopHolders();
+}
+
+let panelErrShown = false;
+/* These two draw from cached state only, so redrawing them on the tick is cheap
+   and means they populate as soon as data exists — whatever happened during the
+   load that produced it. */
+function refreshStatPanels() {
+  try {
+    renderProtocolStats();
+    renderHeroStats();
+  } catch (e) {
+    if (!panelErrShown) {
+      panelErrShown = true;
+      console.error("[render] stat panels failed:", e);
+      const d = $("#protoDetail");
+      if (d) d.innerHTML = `<dt>Could not draw</dt><dd>${(e && e.message) || e}</dd>`;
+    }
+  }
+}
 
 let lastTick = 0;
 function tick() {
-  renderClockChip();
-  renderProtocolDay();
-  renderHero();
-  // re-render the position list about every 10s so countdowns stay honest without thrashing
-  if (Date.now() - lastTick > 10000) { lastTick = Date.now(); if (S.account) renderPositions(); renderBurns(); renderVault(); }
+  // Every call guarded separately. One of these throwing used to stop the ones
+  // after it, which is how the stat panels ended up drawing nothing at all.
+  const safe = (name, fn) => { try { fn(); } catch (e) { console.error("[tick] " + name + ":", e); } };
+  safe("stat panels", refreshStatPanels);
+  if (!S.account && !S.loadingUser) safe("idle bar", () => hideProgress($("#posBar")));
+  safe("clock", renderClockChip);
+  safe("protocol day", renderProtocolDay);
+  safe("hero", renderHero);
+  if (Date.now() - lastTick > 10000) {
+    lastTick = Date.now();
+    if (S.account) safe("positions", renderPositions);
+    safe("burns", renderBurns);
+    safe("vault", renderVault);
+  }
 }
 
 // the tab icon reuses the mark already embedded in the masthead, rather than
@@ -2544,7 +3225,13 @@ function tick() {
   document.head.appendChild(l);
 })();
 
-boot().catch(e => toast(explain(e), "err"));
+const BUILD = "2026-09-17c";
+(() => { const b = $("#buildId"); if (b) b.textContent = BUILD; })();
+
+boot().catch(e => {
+  console.error("[boot] failed:", e);
+  toast("Startup failed: " + explain(e), "err");
+});
 </script>
 </body>
 </html>
