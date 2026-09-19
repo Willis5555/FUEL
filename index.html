@@ -82,6 +82,8 @@ header.top{border-bottom:1px solid var(--line);background:var(--bg);position:sti
 .btn.warnbtn{border-color:var(--amber);color:var(--amber)}
 .btn.warnbtn:hover:not(:disabled){background:rgba(224,179,88,.12)}
 .btn.sm{padding:5px 12px;font-size:12.5px}
+a.btn{display:inline-block;text-decoration:none;cursor:pointer}
+.newtag{color:#35ff6d;font-weight:700;font-size:.85em;letter-spacing:.06em;margin-left:8px;text-shadow:0 0 8px rgba(53,255,109,.45)}
 
 /* ---- tabs ---- */
 nav.tabs{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin:0 0 28px;overflow-x:auto}
@@ -180,6 +182,11 @@ input[type=range]{width:100%;accent-color:var(--accent-dim)}
 .pill.safe{color:var(--green);border-color:rgba(178,229,186,.5)}
 .pill.bad{color:var(--red);border-color:rgba(235,158,138,.5)}
 .pill.warn{color:var(--amber);border-color:rgba(224,179,88,.5)}
+
+/* A clock that reprints every second, so the digits are fixed width — otherwise
+   the whole row twitches sideways on every tick as the glyphs change. */
+.countdown{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:.01em}
+.countdown.ready{color:var(--green)}
 
 .derived{font-family:var(--sans);color:var(--dim);font-size:11.5px;line-height:1.5;margin-top:3px}
 .empty{font-family:var(--sans);color:var(--text-dim);padding:30px 0;text-align:center;font-size:14px}
@@ -458,14 +465,12 @@ input[type=range]{width:100%;accent-color:var(--accent-dim)}
   </section>
 
 
-  <div class="panel" id="donatePanel">
-    <h3>Support the dev here</h3>
-    <div class="row">
-      <!-- sized to the address rather than filling the row, so Copy sits beside it
-           instead of being pushed to the far edge; it may still shrink on a narrow
-           screen, which is what keeps the address from overflowing the panel -->
-      <span class="mono" id="donateAddr" style="flex:0 1 auto;word-break:break-all"></span>
-      <button class="btn sm fixed" id="btnCopyDonate">Copy</button>
+  <div class="panel" id="morePanel">
+    <div class="row" style="justify-content:center">
+      <a class="btn fixed" href="https://willis5555.github.io/MOREDASHBOARD/"
+         target="_blank" rel="noopener">MORE STAKING</a>
+      <a class="btn fixed" href="https://willis5555.github.io/PAMP/"
+         target="_blank" rel="noopener">$PAMP WHITE PAPER <span class="newtag">NEW!</span></a>
     </div>
   </div>
 
@@ -517,7 +522,6 @@ const A = {
   multicall:   "0xcA11bde05977b3631167028862bE2a173976CA11"
 };
 
-const DONATE = "0x9faA8F035c13ce36553cE183068269d0bA36f8c6";
 
 // Neither burner exposes the caller's cut, so this comes from the protocol's own
 // documentation rather than from chain state. Labelled as such wherever it shows.
@@ -730,6 +734,17 @@ function fmtDur(secs) {
   else out = `${m}m ${Math.floor(secs % 60)}s`;
   return neg ? out + " ago" : out;
 }
+/* Counts down to the second. fmtDur keeps only the two largest units, which
+   reads well for a deadline days out but is useless for a clock being watched. */
+function fmtCountdown(secs) {
+  if (secs == null || !isFinite(secs)) return "—";
+  if (secs <= 0) return "00:00:00";
+  const d = Math.floor(secs / 86400);
+  const pad = n => String(Math.floor(n)).padStart(2, "0");
+  const hms = pad(secs % 86400 / 3600) + ":" + pad(secs % 3600 / 60) + ":" + pad(secs % 60);
+  return d > 0 ? d.toLocaleString() + "d " + hms : hms;
+}
+
 function fmtDate(ts) {
   if (!ts) return "—";
   return new Date(Number(ts) * 1000).toLocaleString(undefined,
@@ -1501,11 +1516,26 @@ function renderHeroStats() {
   const host = $("#heroStats");
   if (!host) return;
   const f = headlineFigures();
+
+  /* The pump fund's cycle, counted down to the second. This redraws on the
+     one-second tick along with the rest of the panel, so the clock runs on its
+     own. The length is read from the contract rather than written in, so the
+     label stays honest if the constant is ever different from 1000 days. */
+  const lenDays = S.K.CYCLE_LENGTH != null ? Math.round(Number(S.K.CYCLE_LENGTH) / 86400) : null;
+  const started = S.L.vaultGenesis != null && S.L.vaultGenesis > 0n;
+  const end = Number(S.L.cycleEnd ?? 0);
+  const left = end > 0 ? end - chainNow() : null;
+  const clock = !started ? '<span class="addr">clock not started</span>'
+    : left == null ? "—"
+    : left > 0 ? `<span class="countdown">${fmtCountdown(left)}</span> left`
+    : `<span class="countdown ready">ready to sweep</span>`;
+
   host.innerHTML =
     statRow("ETH held across the contracts", fmtEth(f.pooled)) +
     statRow("Price", f.price, true) +
     statRow("Global rank", f.rank, true) +
-    statRow("Mints open protocol-wide", f.open, true);
+    statRow("Mints open protocol-wide", f.open, true) +
+    statRow(lenDays ? `${lenDays.toLocaleString()}-day pump fund` : "Pump fund cycle", clock, true);
 }
 
 function renderProtocolStats() {
@@ -2687,7 +2717,7 @@ function renderRecent() {
    every wallet that has ever opened a mint; each of those is then read with the
    same function the positions tab uses, so the figures are identical by
    construction rather than by a second implementation agreeing with the first. */
-const TOP = { busy: false, abort: false, rows: null, scanned: 0, total: 0, complete: false, inflight: new Map() };
+const TOP = { busy: false, abort: false, rows: null, scanned: 0, total: 0, complete: false, inflight: new Map(), futureSupply: null };
 const TOP_SHOWN = 25;
 
 function topSay(msg) { const n = $("#topMsg"); if (n) n.textContent = msg; }
@@ -2850,11 +2880,23 @@ async function loadTopHolders() {
 
     TOP.complete = scanComplete && !TOP.abort;
     const held = rows.reduce((a, r) => a + r.pending, 0n);
+
+    /* What the supply becomes once every open mint is claimed: what exists now
+       plus everything still owed. That is the only denominator a share of supply
+       means anything against here — pending dwarfs the current supply, so a share
+       of today's figure would read in the thousands of percent. */
+    TOP.futureSupply = (S.L.totalSupply != null) ? S.L.totalSupply + held : null;
+    renderTopHolders();
+
     topSay(
       (TOP.complete
         ? `${rows.length.toLocaleString()} wallets hold open mints`
         : `Stopped early — ${rows.length.toLocaleString()} of the wallets found were read`) +
       `, ${fmtTok(held, S.K.decimals, S.K.symbol)} pending between them. ` +
+      (TOP.futureSupply != null
+        ? `Once every open mint is claimed the supply becomes ${fmtTok(TOP.futureSupply, S.K.decimals, S.K.symbol)}, ` +
+          `against ${fmtTok(S.L.totalSupply, S.K.decimals, S.K.symbol)} today — the shares below are of that future figure. `
+        : "") +
       (scanComplete ? "" : "The event scan did not reach the protocol's start, so a holder may be missing. ") +
       "Penalties on overdue mints are already taken off.");
 
@@ -2896,6 +2938,12 @@ function renderTopHolders() {
     const cost = costPerFuelLabel(r.spent, r.pending);
     // a wallet whose mints are not all covered by a fee event is flagged, not hidden
     const costPartial = cost && r.pricedMints < r.mints;
+    // share of the supply there will be once everything open is claimed
+    const share = (TOP.futureSupply && TOP.futureSupply > 0n && r.pending > 0n)
+      ? Number(r.pending * 1000000n / TOP.futureSupply) / 10000
+      : null;
+    const shareTxt = share == null ? "pending"
+      : `${share >= 0.01 ? share.toFixed(2) : share.toPrecision(1)}% of future supply`;
 
     const box = el("div", "batch" + (r.overdue ? " late" : ""));
     const head = el("button", "batch-head");
@@ -2907,7 +2955,7 @@ function renderTopHolders() {
         <span class="meta">${r.mints.toLocaleString()} mint${r.mints === 1 ? "" : "s"} in ${r.positions.toLocaleString()} batch${r.positions === 1 ? "" : "es"} · ${when}${cost ? ` · cost ${cost}${costPartial ? "*" : ""}` : ""}${r.partial ? " · projection unavailable" : ""}</span>
       </span>
       <span class="amt">${fmtTok(r.pending, S.K.decimals, S.K.symbol)}
-        <small>pending</small></span>`;
+        <small>${shareTxt}</small></span>`;
     head.onclick = () => {
       if (open) openHolders.delete(r.address); else openHolders.add(r.address);
       renderTopHolders();
@@ -3342,9 +3390,6 @@ try {
     $$("section.tab").forEach(sec => sec.classList.toggle("on", sec.id === "tab-" + b.dataset.tab));
   }));
 
-  const node = $("#donateAddr");
-  if (node) node.textContent = DONATE;
-
   on("#btnConnect", "click", connect);
 
   /* Delegated, because the charts are rebuilt wholesale after every scan pass and
@@ -3366,21 +3411,6 @@ try {
   });
   on("#statsCharts", "pointerleave", () => {
     $$("#statsCharts .chart-tip").forEach(t => { t.hidden = true; });
-  });
-
-  on("#btnCopyDonate", "click", async () => {
-    try {
-      await navigator.clipboard.writeText(DONATE);
-      toast("Address copied.", "ok");
-    } catch (_) {
-      // clipboard access is blocked on some setups, including plain file:// pages
-      const r = document.createRange();
-      r.selectNodeContents($("#donateAddr"));
-      const sel = getSelection();
-      sel.removeAllRanges();
-      sel.addRange(r);
-      toast("Couldn't reach the clipboard — the address is selected, press Ctrl+C.");
-    }
   });
 
   on("#btnStatsRefresh", "click", restartStats);
@@ -3442,6 +3472,7 @@ async function restartTopHolders() {
     for (let i = 0; i < 40 && TOP.busy; i++) await sleep(150);
   }
   TOP.rows = null;
+  TOP.futureSupply = null;     // stale against a fresh set of holders
   renderTopHolders();
   loadTopHolders();
 }
