@@ -82,6 +82,46 @@ header.top{border-bottom:1px solid var(--line);background:var(--bg);position:sti
 .btn.warnbtn{border-color:var(--amber);color:var(--amber)}
 .btn.warnbtn:hover:not(:disabled){background:rgba(224,179,88,.12)}
 .btn.sm{padding:5px 12px;font-size:12.5px}
+
+/* Pick the unlock date instead of counting days to it. The contract still takes a
+   day count -- the calendar only works the number out. Same component as the
+   staking dashboard, so both read alike. */
+.cal-btn{padding:6px 9px;line-height:0}
+.cal-btn[aria-expanded="true"]{color:var(--bg);background:var(--accent);border-color:var(--accent)}
+.daypick{
+  position:fixed;z-index:80;width:262px;padding:10px;
+  background:var(--panel);border:1px solid var(--line);box-shadow:0 10px 26px rgba(0,0,0,.5);
+}
+.daypick[hidden]{display:none}
+.daypick-head{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px;margin-bottom:8px}
+.daypick-head span{text-align:center;font-family:var(--sans);font-size:12.5px;color:var(--heading)}
+.daypick-head button{
+  margin:0;padding:2px 9px;font-size:13px;background:none;color:var(--text);
+  border:1px solid var(--line);cursor:pointer;
+}
+.daypick-head button:hover:not(:disabled){border-color:var(--accent-dim);color:var(--accent)}
+.daypick-head button:disabled{color:var(--line);cursor:default}
+.daypick-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.daypick-grid .dp-head{
+  text-align:center;font-size:9.5px;color:var(--text-dim);padding:2px 0;
+  letter-spacing:.06em;text-transform:uppercase;font-family:var(--sans);
+}
+.daypick-grid button{
+  margin:0;padding:0;height:28px;border:1px solid transparent;background:none;color:var(--text);
+  font-family:var(--mono);font-size:12px;font-variant-numeric:tabular-nums;cursor:pointer;
+}
+.daypick-grid button:hover:not(:disabled){border-color:var(--accent-dim);color:var(--accent)}
+.daypick-grid button:disabled{color:var(--line);cursor:default}
+.daypick-grid button.sel{background:rgba(150,201,156,.20);color:var(--accent);border-color:var(--accent-dim)}
+.daypick-grid .dp-blank{height:28px}
+.daypick-foot{
+  margin-top:8px;padding-top:8px;border-top:1px solid var(--line);
+  font-family:var(--sans);font-size:11.5px;color:var(--text-dim);text-align:center;
+}
+/* A button that carries a logo mark, as the MORE dashboard does it: the mark takes part of
+   the left inset, and is sized by height because the MORE wordmark is not square. */
+.btn.has-mark{display:inline-flex;align-items:center;gap:9px;padding-left:14px}
+.btn-mark{height:20px;width:auto;flex:none;mix-blend-mode:lighten}
 a.btn{display:inline-block;text-decoration:none;cursor:pointer}
 .newtag{color:#35ff6d;font-weight:700;font-size:.85em;letter-spacing:.06em;margin-left:8px;text-shadow:0 0 8px rgba(53,255,109,.45)}
 
@@ -168,6 +208,14 @@ input[type=range]{width:100%;accent-color:var(--accent-dim)}
   font-family:var(--serif);font-size:16px;transition:background 120ms ease;
 }
 .batch-head:hover{background:rgba(150,201,156,.07)}
+.batch.holder.open{border-color:var(--accent-dim)}
+.batch.holder.open > .batch-head{
+  background:rgba(150,201,156,.10);box-shadow:inset 2px 0 0 var(--accent);
+}
+.batch.holder.open > .batch-head:hover{background:rgba(150,201,156,.15)}
+.batch.holder.open > .batch-head .when{font-weight:600}
+.batch.holder.open > .batch-head .amt{font-size:17px}
+.batch.holder.open > .batch-head .amt small{color:var(--accent-dim)}
 .batch .twist{color:var(--text-dim);font-size:9px}
 .batch .when{display:block;font-family:var(--sans);font-size:14px}
 .batch .meta{display:block;font-family:var(--sans);color:var(--text-dim);font-size:12px;margin-top:3px}
@@ -252,6 +300,16 @@ input[type=range]{width:100%;accent-color:var(--accent-dim)}
 .progress.slim .pct{display:none}
 
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* ---- PAMP theme layer ----------------------------------------------------
+   The look of the PUMP MORE dashboard, applied on top: neon green for the title and
+   hero figure, the pixel-font panel headings (upper-case, centred) and every stat
+   figure. One block at the end so it wins the cascade and can be lifted out again. */
+:root{--neon:#39ff14}
+header.top .mark .txt{color:var(--neon);text-shadow:0 0 14px rgba(57,255,20,.45),0 0 2px rgba(57,255,20,.6)}
+.hero .big{color:var(--neon);text-shadow:0 0 14px rgba(57,255,20,.45),0 0 2px rgba(57,255,20,.6)}
+.panel > h3{color:var(--neon);text-transform:uppercase;text-align:center}
+.bigstat .v,.stat .v,.chart-tip .v{color:var(--neon)}
 </style>
 </head>
 <body>
@@ -300,6 +358,8 @@ input[type=range]{width:100%;accent-color:var(--accent-dim)}
         <input type="range" id="mintTerm" min="7" max="100" value="30">
         <div class="row" style="margin-top:6px">
           <input type="number" id="mintTermNum" value="30">
+          <button type="button" class="btn sm fixed cal-btn" id="mintCalBtn" aria-expanded="false"
+                  aria-label="Pick an unlock date" title="Pick an unlock date"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" focusable="false"><rect x="1.5" y="3" width="13" height="11.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M1.5 6.5h13" stroke="currentColor" stroke-width="1.3"/><path d="M5 1.5v3M11 1.5v3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></button>
           <span class="fixed addr" id="mintUnlock">unlock —</span>
         </div>
 
@@ -451,10 +511,20 @@ input[type=range]{width:100%;accent-color:var(--accent-dim)}
     </div>
     <div id="statsCharts"></div>
 
+    <div id="inflationHost"></div>
+
     <div class="panel">
       <h3>Top Minters</h3>
       <div class="row" style="align-items:flex-start">
         <p class="note" style="flex:1">Every wallet holding open mints, ranked by what those mints would pay out. Figures are the same ones the positions tab shows — read per wallet, not estimated. Cost is the fee actually paid to open the mints still held, taken from the mint events, not a re-quote at today's gas; a star marks a wallet whose mints are not all covered by one. This reads a great deal of chain state, so it only runs when you ask.</p>
+        <select id="topSort" class="fixed" style="width:186px" title="Sort by" aria-label="Sort the list by">
+          <option value="pending" selected>Most FUEL pending</option>
+          <option value="mints">Most mints</option>
+          <option value="unlock">Soonest unlock</option>
+          <option value="overdue">Most past unlock</option>
+          <option value="spent">Most ETH spent</option>
+          <option value="cost">Cheapest per FUEL</option>
+        </select>
         <button class="btn sm fixed" id="btnTopLoad">Load list</button>
       </div>
       <div id="topBar" class="progress" hidden></div>
@@ -467,10 +537,10 @@ input[type=range]{width:100%;accent-color:var(--accent-dim)}
 
   <div class="panel" id="morePanel">
     <div class="row" style="justify-content:center">
-      <a class="btn fixed" href="https://willis5555.github.io/MOREDASHBOARD/"
-         target="_blank" rel="noopener">MORE STAKING</a>
-      <a class="btn fixed" href="https://willis5555.github.io/PAMP/"
-         target="_blank" rel="noopener">$PAMP WHITE PAPER <span class="newtag">NEW!</span></a>
+      <a class="btn fixed has-mark" href="https://willis5555.github.io/MOREDASHBOARD/"
+         target="_blank" rel="noopener"><img class="btn-mark" src="data:image/png;base64,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" alt="$MORE">STAKING</a>
+      <a class="btn fixed has-mark" href="https://willis5555.github.io/PAMP/"
+         target="_blank" rel="noopener"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAYoklEQVR42t17B1gUV/f+7GxvbGNhYZelLV0QRYqAIBYsgH0tiBpFib33BmLvGmuUxGjUKPYWjRrsUYxpYolGwY69a5Cdnfd3d2GN8cv3/ydfEjW5zzPPnZ2ZXea895z3lHugqN8Y2dnZtG3O7JGV1r1fr8LFny65suizxbsyRnSeFtS0SmNyS/Xq8/n5+Vwqm6Kpf8Mwm81c2xxqDk2PGBFhFcaJMWDQIBZk3H/6mD3yQyEWrV9amjW+x7aApgHp5FGp7Xlym/NvAIJTOWv8F7pcVhQKQY2hLKkt09gXZRamrKzMQgS12sB48uJn9sAPR5G7dNK1er3qTaNcKS8HEGZzPvcfuvqU/cVNLYwtO5/3QhvwLV6rOOjZtx8+W7cFG7btwtGvv8fFy1etT548s4HBsCyLn64XY/ryWc+TMpNmEn1weWkWlF0bOK8A+26PxOxEnm32y9S8f+TRMBRhwIuUnBBL27Y9mOj4utbGqWY2s2sf5Iyfhk8+zcfBI1/jytUbVks5YwODPX/lIkbNH3PTr0lgW4c2vDL/A0Bw2G8QFTJ4deqjCQVNMCy/MZu+KAZJg6uiRvtqbJVGEZYqCbFMfL1GbEbHLIyfMBMbt+7C2XMX7GbCWKzszsN70bJvm3WUiDIGxwSrNRpKXvkX/gGmUWkGVFWqvaG9dEXGIv3Sjnlux99faXjQfYsneuz1ZTtuDkKdOcFsUK8QS2jLKDbF3BKDh2Zj7YatOF98ycpawVy7dRPdhvW8mWhOuDX5w2EFDrLMprLp38FDb09bzPkVAPgP0Gzw7eU80HYebKYEZHLxrCuvmTRAOdo8V3u83073F6NLAtClqDobMTeICWsdiUbNmmHY6Fzs2F2A8jKm/GjRMXb8ygnsyeJvQQVQg4JqBnmS3xFWEKWZ+x+Cm3/REIAAZX7TGlP5B8VRsqbNjrshdpXzKfJRUvFCr62KXhoWn6VdPHJ96MMlD1LQ7ttgJmxwVWtMcgKatWrHLlu+jsldNuHcoaJjzMojeYxLsrw894Mx6D7B3KUy1uC9/K2K33Zohm3mv7Ygb1QjPJov8rrcucwFcd87oWqGdmgFQVI8G0C22QbGS0CElG9SF/3m6ceqYnCpvzV+TmR5rTb1EFW71pY9Bw/M2PLFXnxQ0BeTN3U6/tOFS1j48cIJ+tr66JotqiVUMC/lAEKsbiQb2Xim8VTLTzUl8RPVW1W13GMrwX9z2uDdX7N6zcMk1L0rLA+9yUfqR7pbFCUyvrI6jsF1mIs9cAiSd+iTF3gv90E4ai+p9u3c2YsHzpq1+HG7MW3Q42D4ta+K9m0uKiou77O49ZL9J3csnLlq7I/ka3bhpTUpF3ltSUHPQ/6YAFfrR6jD5lkaoP0eZ6t/d6c5FKWVvVyEv1Ub4qhGufvisQ7VmbDrFNyKeUzr8xpEZimnv8oPr3uO/PyX9hzcZ170tHG7+s2v36LZ4/CUGj+75Ejudito++HWTQduzfpoEmbubXeh9F7p8eU7l0IVoRruXkPlQYXSRS2W+CAb+vKMhwIm/+FY6zPmvuUbfMyMuBWIuHmyInlNbWxFfEH9fdFm4Dj5zkvWkdj0pD8TVsqH5ixtjbsuRts8VQm5rXwtWvzVyPowwm63x85NTxmytzbr29XlsLiFrGX6UvOc4f1zi9v06IrEZfrHq36YvnH/V4Uvpi+fiC8PHSiv2iTyUUgHLWY8D2K6lMnQw6JC5+cCTHrQED89PcHewXnLx9YMtN6jLg/oqZxK9ED0t3FDl7XuN4E9uPj0Eht5TQmnUxyYivnW3vuVoKIkyb9yk7896GyyOhvORLgBH0o+LcoZ0iCzfnlgzSql6gFOBxutr7Nyy4aCC0NmDMP67ett+YU1c0gWO+FEqHUQNKh3SoGg9RI0O6dBxzI+Oj5wwvoH40nYfdv6NVYwQ0qDED9P9r06Th/zEoS/UhtG7DA8tQGw5fF61ucSBek3fASV8JlxRUpI6gjf+x0A/BL9ZYO3sKjlsroLPL+UNdMFZS3o0b3n+4Mut8hsi3otG1oXf7gCYyZNRv/1oeww6BG8RwLBOAGooTT4YwWovl2J9LsKtHpEYcSdWjj95AjRhnOWpeXt0GSXotyvu2ocsTjBK9zw50ffz0x3jyASLa7pWafTFLiFHPR6zmUmH1KBCpOk/h4AXnWZBAz76mwtHjy4xdhkaEI9n+qDvJnI6DhUqRGH9jOqYtAzI/T5fPBH8SAcJYR4jJDMBIh+NFRTxGhwQgPzEz5a3ZFh1b1cPCq7bT2EJUyfKyZEzZIVSqK8qv5l3BDd13PXjjI/jIOgLPombRnys/LF90hA/THK8+S2/P/FAb8V0e1DRW7xyQ/Nm2Ru8V/UZq3P1rAuJriZAq2JXX0w8KYXdJ9ywelPg+pGooEu5HiPHBkUZAOF0I3WgNdXiMBVTmhyVYZG9yj0vRmHH598zV5nTzKzytLQaKvTU98uLiRgqyTiP+Uu5VRAg9HuF2dd1mLlc7H1i9I4pE+MfET5U41+lSv8wZFf6T12MTU7t9/mwZhaa9HjnJH1zudBOVaEwBku6LSzLibtGYnZBeMxaddYzD+SA/+R7hWAdKehyBYj/ogaDR5w0eiGHGvuzsDj8tvMFutU5r1zRkRNVuwXhOv9KoIsO/D/qzbItO4N5AOju6pWuKXKc0kQ7P8bMcAfy7FIWEvs1M7eYa11yzqccEfIFzxGMowGN5MD5/cI8U2JxJ3nJSgre4qS66fw+OltnL5/CAmzq4Miz/C68eyz78cK1LkiQ+wdCoNKG6PkyRn2RxywjH1INPUzzQO/9rpOfyaUpv8j5P0TK//6900N1THND7o8jTwmhHIMl5X3FsOjvxtUbRSYunocHpRfRXKfOIirCzBzbbat7oK8ozNA1aMg6SpC6ARvuA5whmyECFFHVYgiIDS4qsOO+5/ivuU681FZX2vGcT0iR3isIOqseUUb/hgItsKIzcXYCyR/kfAipSyh6Vbdk1oXhFBP5rKCrlxouiqRPKE6ztw7YBf2YdlVfHf9IG5bLuLOi2IU/LgBGXMbYsQnA3D69gl8XpwHaSYhyLY0eJ348F6hRNQVEcKvc5Bd2gW3nl9mD5V/ZhlyIxZpC4MvGeJ1ifZX2EfyjrdVqstHhRq+t8FzSetHMrgsocv53XngZxCVrk2h/+KuRPRnGDrvfbQdkYZBC7qi6ZC6aDigJqatH4Oia8dw+d5pO0Ajt3QFiVah7+WM6KnBoNK5cM6VI+I7NQJvUEi7HISvHxXgsuWkZdbDDui8rVp5dOfg4S/d89sAwW6LZEw5E7Qq+ogY3L5UuW31qVQKNScF4zx2o8vM1qC8Cdl5UDA00mDB9km4frfYLvTczTnI37cMP93/GsKaHAR29sWPD77CitPENFpR4DSjQWcQbtiiROgNHsJLxFhaOgm3yi5Zlz8bxQw7lYTmoxI2kVfQ/iXm/L/WF8Yvr1EvY7fxZ3EuEb4dZZGmi9hW8xIQkKkHVYUIEsuFe3sV8gpzsPboAgzJ646p60ah8PIuOxCTt/VHyqAEPHp+3f558PIeEDamYZ6Tipn7R8FviB7C4RwEnZbCdI1C5qVknH/6PfvJsxzL0FsJyJqbfIpyfknob7jSVon6hm8TIjMLPM/p50gg7iSxSOqIWCqaAq8+H5JUCar08oRbPRe7JlA+HFAhFA4Xb8faA8vQa146LLiP5Qdm42H5DRy7uIeYxxE7GKfvHkb06EAE9jLBpb8TNGspeF6hEH9RT7RhJhKu6C29HkSgx5K6l0j67v12QKg0BWCZKPubkEkRa9RWuhuXpVO4DC+NhqSpGO6dFTAOkMO5nRxUMAchnU1YfXEC2s5IwslHe9BmVBrC2/jj8E87MGvDGNx9cQlnS7+Fj9kZK4/MtoPxVfEXaD6tEdTT+TCe5cHzAiHLMzTii73K91tmInmS+8a3BECl7W3WyPULXJOyC8PTGx7W31DNEoFqSVvopiT0Tqbh2kmKmMVaxHysQkSOO1wbKNBwcCxCOnnaeUKTqISgKo1Pts/HHUsxgjM8kdq3Hu4/v4KZK3MwZdkYPHhRgqmfDyfRJA/eX8lhvMiF4Xs+O/X+ULTeHvz4zQu/r8IXDztrCK1boP/Op48XeDy3WsAwRfMizwPe22TgdKItPOLeqIYccOJoePWWo9EeNRpud4amGQHJk4IgnsxBJADK64DnuITgVj5oOyTFvvI/Wx5iBgHAPDQVW4+tsV9Lnhpt4xvotsug+o7LOh0UImC5+vlbEX7y2bC0zGMBD8PTw+DnHY6AsJA0clng66s1ZV70/SyEZH9UJvEQxCx47Wwukvj6WnxUm+mEjCtaJKxVkc9cKOvJMHR7W/i0dEN8p+q26AELtk1E59zWOPDjVlx69i0u/fwNDl5bTzTIH1QaBfEQEWRf8hn5ehH0ozW73mAMUJGgrLkWkzbyh2o/V0+JYIMDo1lDsN9TXrjgi9BxSgSM1OTZnsk4FLDC8KkTqJEUw+tNWwVZXNBmQoTRJCtsIUazQjXSzzojfJwzeCFcqGrI8cmZHGR92ByE20H5kiOUCFuH3GsrgNBMtIl8n9uOC/E0IStYyYM2R/HQtYaqyhslvRXHa8ZOLIl4EtG6Bky+1VhXf19WUVvMdtjkwvQp9M5J3EcqPJX80LGg+kj/Lc5WehaHpYfQVm4fUhvoTLJFYhZ0TS6qT3ZB08+NiFmoRuzQQLimakD2L8BLJIFVY5JSp/DASSG/1pQ8n07ig3QOBMMFEC0XMIrJhFw7qTPfUPBTkU/kT4lQLH4UXRQ/PQJGz9AXrp4+t9UxMuuAAvfba+6FxDnI0eYmE/dVFDX6HY1rFLNPf0tMVowaz2F5I8gq9iDCtCYrWpsDRZocAf01qDFPA2VrMej6PHBtAjfj2J/hZhDT6Uy+8x4NQW+iCcuFjHSWGC5ZmmWVJXj6jan+ttt1pg892RLaiGCYvAKHCcIE/n236EtX3g6yl8SzT5GKDulF8PT0tGWKnMRKvhi9OSkg6ZhbicsXfHDn8azcsVzYtIH3HjGLFhw7P4hSSLUqmxBkFiFQm6q3JyB1qsguuV3Js1k8iPJEVtECAVR9FGelrhWbtn/7HoMj6Jm5izJtftzjQY3RydAZPc/Zrk0s8ho944wp23Y+93OT0DZHxccHV4uODnK8XDYqylwjS4JGdWBV8DsmsvAX80CPJ4INJAL24NpXl27NsYOhfF8KYVc+6G7kWk9yvzd57n0SVywQs/wlXDgNVpSpm6ij/3yx5A+u/s7StJw5N0ZDXT8ARkPAoayt/s5Tz3tvHH7IqHKsQps2nbxCI6J26vV6gwMAc2XyNPhH/w97QImw0xKL4BMRxEtF4M0hdYERtB0IQpTgkkIJ530SP9jO+xJgBhEQSClNPFME4Qo+I82RQtFWPeC1DZg30mBBFzwZfLzN3i7QhHhCQfpNppcaU3K+9xzvsPutW7dKImNrHTX6BnatzBq4lVtk1PSFGS5DbhuvtS0jxFUgtQoaEABIDCCZLQVvKRHUpg2jiNAk9ucNJ0Lb5pHEPEiBRTCFD2G+gBFOFkHZRbnmjdn9q+qfvZPy2vQg+3nwrLrQe3uXU1SkZvwF09CRx4KaVqam3PikentMgVXGvtqW49Ceaadi+wyBK6KuShjhNAn4/kTFQ4hwVQWQDSMqTwiSnksAmESOiQSMCQSEXHI+jQvRBiEjnMOHso+y0LVyR/qN7S06Mr+8b3zqfvRoKJz7VIGHwecFKV8bxxQbJwza7x9pu9+gSbPpQaHVcipe7GXzREUlmXi13DsB37zHSqE7JLEKUkkKTUJfbiJZ5XjiFqsIIOkohXg1ub6cqP8H5J4NjFnE328k/v5jHuSDnZ7Ia8vfnN2/bv/rL1VrOeNeFmTpvsT+TUQDvDxHXTBMGnpOF5QQmh5aMzGxVWVPDveXwmnF+bKTTVLGMAbE3iAMPlNKBCZujgjOTSArXYccDch5JLHzRmKIFxNe2EA+53Eg3CwAbw3XKsmVQNVR1fpN2v1/AJB/JbD52FstIepguuXl4QfSdFN1xGWf4T0P+zd11OkqW/E4rydL8+9Eb+xOyM/lKwnDJzkAtxoRunaF8HQymRuTo7ntMxdCwgvi6WIICkgQtJ3HiD8QE6+gnF3xMm+hG8VhAtsvaWMHXg8nNum31NvFd6CUDmg//JFXk67feU2y7yOeiOD/VtS45ZvMsHFPvMuiSwmLz5ay/DAB6ARi3zYAiPB0Y6LyaRx74MNtQ5Km2lzIc4k5fMdjBKt4UI9SfmVvw8Fb6jJxRICnSiJ1A0u0ZU7TvIqdqBi1m4dfTmyvAPd2P3h8WXe90ef1nWZH3TDvRtLsnlBBc1jECJtLyOoTxidBj331GxIgSN2AS3w/j8QAFCmFKTPFCL6gYuldHGgXKH5WJihrvXG7/29jwSOXfWEbSXUnyauqyWRq5cz1a9ziiqFZ8gGPfVSiPfKjKBL+OoA4unqO64xHVW7E3BRAMEdi5VclTF+LrHQiEbw+OVLoipC3FblGiqFUYy7i9+lg/EnCqDfL4NlXM+6tqf5vVYFX3tR1H3k7FKJePktsnw3BpOOICvJreEOfEXnQsFu/Wh9Wof4V4e/qq03792ddoT4qZERmCegwouKE+Gjb6jciQpPVp4nt89pz7MmOz3gFaj3QMrLDAlSZ51xoS60pvAuteJUv0bAP5bTqcdxPXXe0ARVDJZops8wY4D/JlQqOCjnoFue1232dPt9tunSOa5UTqSckcx9XOxl7RwTBfOL6iO1zY8iK1yJHPQIEAYBuQs5JimuzfWFbIRqX6FnXMyIE5CstplRl4juj+q/uBc78TtZ8F9MdaQtaXCXFSJPtmmeg70C9zr+D7dxnnb6FaIbb8HlfJ/fp90IHp0K+VdiO+HcS9HBjba6vAgCaVH9pG/G1I6vfkIvITc6Iuq9idEckqDlVN9UuO96xHkTHfsD8Cz6jd7ID0WB+3fMkH7OrvY/ZR2EwG8SVgQ/9wcMqx2LvSEEvFFuF1fh2P0/HEMFr/QIArzmJ+4kXUA+WoslTN6vzd0JUW6ku9ZfJnCsqT8Tn4x3rRnXEBVPOeff+8F7TsgZrQl7wUgW25ITrAGj5T7Xb9CvTQXqYZ5X1koF25dorwpwoW6GDCF6PgEEKIrwUG/HxUOdHV4Rec2K9dstgbKd47r7AeWWnEv9ARzdZ9rvWre4gxREnNIFjrwSua7zPFR7jZSWyViJ7+13+06hFdW9KQW2iy037yTbXR2p4ZMpI8sMnGyakCBJBwCBaQEVx4ZWnRNoLQpQnBAib7AyBRs4qWsqRvE77dOoxwxBXylX6mz2Nb3uY83/J9GY9DPVJOaof57tIc0bYTb550lfVsxtcJ6Wt7RTL28xltAdFTMi3MjbmsBrVlinh0VsKabwA/G6E+J7p4HdGxpr2yllddQUkSmdWFqS2uHbSWXvs98b4TYrTIeHaqq8mZu8QJ9i33n/1UsYPjN4NzeHazBPBw/32Ku8qdpMS1waapfI4rGA1bdHtFzGhJxVs0CEn1Ctxg/meHspCIVtluJrl0zKrzFkNlbsOznHubNL8VMvC0trIzhc/5GmcIt/KPuDv3SBJfIWwHOo6fGNdTdJ2rw6BO1x26jbKn0m3CMFZSdR/GcdKbaEscWddLT7HSRV5n/y+e2PFHYG7HBKxknHSauDsoYdbigdGHBxn2WZNRrfZ3NPE3yjfaCr8P8cM5LBHg6/Ybfr6Gj7hWwyDjBtUhc6bpIxkJ+kJ2EEx2m/FSD1kmCjqovNUD1MUySOUkIrVjErnCq3JAP/Owdh4Y7Vl6Y1g1MriDf+vzZ3vJBawFUXtmvFSbUmrHV1rTWB102bdxOD92q/rH3Zf3WFeoL3zw7jKqHJbpN2jiNdAJtUwWncPqAK1aDm9vfXzBwvQZZ3se+qXput/xn+svNpVkvjf/LrtWuWqmo6ZnAwrtEcVYWo4yV2srgZPGOJ82I7buqHJJl+2U75zxK/2Jf+Jo9I8uBUVYyKIA5RKEOIfm4L9Z7g8kirIPoGLjjUa/CDt52bxWmZEysce4/7SRkrq3fiPtpfDsZnS7KTnFM8mGogIH7jpvKCv48eop3shPNfw5T/TBP7glvssVA1JnOD6QihWQuPqzrqH+LDavl7w7Ga4nYhKb4B/KQiOBqgOKz1+UBrVUKhdrTofL9Y9yheGZt4Wt61uge9sTPBX/qdbn8/dd+vCiEdQujA6o5E1uPvBI9nH6vKJS9i/GgBHyDuh0GOTW00nyBUujLPewHoY/WFI8nqhXao1/asBcJTTt19ruzK8XQC4Qnm5i95o0em8oanvesGMGPG/mggdKfeBax3a9D8SCbq6yCrXODPKSA10vdzHvlOVor+7DDfmum/v4LWac9Ke8gsuQ3XZifj/9wn/H7VR0bzhAx9KAAAAAElFTkSuQmCC" alt="" style="height:20px;width:auto">PAMP DAILY AUCTIONS <span class="newtag">NEW!</span></a>
     </div>
   </div>
 
@@ -1805,7 +1875,7 @@ function renderPositions() {
         <div class="addr" id="runFee${n}">quoting…</div></div>`;
     const bar = el("div", "row"); bar.style.marginTop = "10px";
     const b = el("button", "btn primary", "Claim and reopen");
-    b.onclick = () => doClaimRemint(run);
+    b.onclick = () => doClaimRemint(run, b);
     bar.appendChild(b);
     box.appendChild(bar);
     runsHost.appendChild(box);
@@ -2260,6 +2330,10 @@ function buildSeries(logs, coveredFrom, ctx) {
   const pooled = new Array(nb).fill(0n);
   const ranks = new Array(nb).fill(0);
   const fuelBurnFlow = new Array(nb).fill(0n);
+  /* Net FUEL minted per bucket. Staking BURNS the principal on this token -- the
+     contract holds none of it (balanceOf(token) is 0 against 30k staked) -- so a
+     stake is a supply cut and a withdrawal mints principal and reward back. */
+  const supplyFlow = new Array(nb).fill(0n);
   const moreByFuelFlow = new Array(nb).fill(0n);
   // Only the arrivals. Pooled nets burns and sweeps off against them, which answers
   // a different question — this one is gross ETH in, before anything is spent.
@@ -2304,6 +2378,15 @@ function buildSeries(logs, coveredFrom, ctx) {
         moreByFuelFlow[i] += pl.args[1];
       } else if (top === ev.rank) {
         ranks[i] += 1;
+      } else if (top === ev.claimed) {
+        supplyFlow[i] += I.token.parseLog(lg).args[1];          // rewardAmount
+      } else if (top === ev.staked) {
+        supplyFlow[i] -= I.token.parseLog(lg).args[1];          // principal burned
+      } else if (top === ev.withdrew) {
+        const pl = I.token.parseLog(lg);
+        supplyFlow[i] += pl.args[1] + pl.args[2];               // principal + reward
+      } else if (top === ev.lpMint) {
+        supplyFlow[i] += I.token.parseLog(lg).args[1];
       } else if (top === ev.opened || top === ev.reopened) {
         const pl = I.batch.parseLog(lg);
         recent.push({
@@ -2322,6 +2405,10 @@ function buildSeries(logs, coveredFrom, ctx) {
     for (let i = nb - 1; i >= 0; i--) { v[i] = acc; acc = acc - deltas[i]; }
     return v;
   };
+
+  // burns are already counted per bucket for the burn chart; they cut supply too
+  for (let i = 0; i < nb; i++) supplyFlow[i] -= fuelBurnFlow[i];
+  const supplySeries = backFrom(S.L.totalSupply, supplyFlow);
 
   const currentTotal = [S.L.balFeeDist, S.L.balVault, S.L.balBuyBurn, S.L.balMoreBurner]
     .reduce((a, v) => a + (v ?? 0n), 0n);
@@ -2352,7 +2439,7 @@ function buildSeries(logs, coveredFrom, ctx) {
   recent.length = Math.min(recent.length, RECENT_PER_PAGE);
 
   return {
-    edges, pooledSeries, rankSeries, inflowDays, inflowByHour: byHour,
+    edges, pooledSeries, rankSeries, supplySeries, inflowDays, inflowByHour: byHour,
     fuelBurnedSeries: backFrom(S.burners.fuel?.burnt, fuelBurnFlow),
     moreByFuelSeries: backFrom(S.burners.more?.burnt, moreByFuelFlow),
     negative: pooledSeries.some(v => v < 0n),
@@ -2392,6 +2479,12 @@ async function loadStats() {
       buyBurn:  [I.buyBurn, "BuyAndBurn"],
       moreBurn: [I.moreBurner, "MoreBoughtAndBurned"],
       rank:     [I.token, "RankClaimed"],
+      // every path that changes the supply. The token is already in `addresses`,
+      // so these ride the same queries -- more topics, not more requests.
+      claimed:  [I.token, "MintClaimed"],
+      staked:   [I.token, "Staked"],
+      withdrew: [I.token, "Withdrawn"],
+      lpMint:   [I.token, "LPTokensMinted"],
       opened:   [I.batch, "BatchRankClaimed"],
       reopened: [I.batch, "BatchClaimedAndReminted"]
     };
@@ -2465,7 +2558,7 @@ async function loadStats() {
 
 /* small line chart, no library, same palette as everything else */
 function svgLine(points, opts) {
-  const W = 660, H = 190, padL = 62, padR = 14, padT = 14, padB = 30;
+  const W = 660, H = opts.height || 190, padL = 62, padR = 14, padT = 14, padB = 30;
   const vals = points.map(p => p.v).filter(v => isFinite(v));
   if (!vals.length) return `<div class="empty">No data.</div>`;
   let lo = Math.min(...vals), hi = Math.max(...vals);
@@ -2483,12 +2576,13 @@ function svgLine(points, opts) {
     return `<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${W - padR}" y2="${yy.toFixed(1)}" stroke="#35453b" stroke-dasharray="2 4"/>
             <text x="${padL - 8}" y="${(yy + 4).toFixed(1)}" fill="#bcc7be" font-size="11" text-anchor="end" font-family="JetBrains Mono,Courier New,monospace">${opts.fmt(v)}</text>`;
   }).join("");
-  const firstT = points[0].t, lastT = points[points.length - 1].t;
   const lbl = ts => new Date(ts * 1000).toLocaleString(undefined,
-    opts.bucketH >= 24 ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", hour: "2-digit" });
+    opts.bucketH >= 24
+      ? { year: "numeric", month: "short", day: "numeric" }
+      : { month: "short", day: "numeric", hour: "2-digit" });
   const lblLong = ts => new Date(ts * 1000).toLocaleString(undefined,
     opts.bucketH >= 24
-      ? { weekday: "short", month: "short", day: "numeric" }
+      ? { weekday: "short", year: "numeric", month: "short", day: "numeric" }
       : { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 
   /* One band per reading, each holding the crosshair and marker for its own point.
@@ -2508,15 +2602,32 @@ function svgLine(points, opts) {
     </g>`;
   }).join("");
 
+  /* Five dates across the bottom rather than two. A span of months read as a
+     single start-to-end pair gives no way to place anything in between it. The two
+     ends keep their anchors so they cannot spill outside the plot; the rest are
+     centred on the reading they mark. Labels are dropped if they would not fit
+     side by side, so a narrow range never overlaps itself. */
+  const WANT = 5, CHAR = 6.7;
+  const room = Math.floor((W - padL - padR) / (lbl(points[0].t).length * CHAR + 18)) + 1;
+  const ticks = Math.max(2, Math.min(WANT, room, points.length));
+  const idx = points.length === 1 ? [0]
+    : [...new Set(Array.from({ length: ticks },
+        (_, i) => Math.round(i * (points.length - 1) / (ticks - 1))))];
+  const xLabels = idx.map(i => {
+    const lastI = points.length - 1;
+    const anchor = i === 0 ? "start" : i === lastI ? "end" : "middle";
+    const xx = i === 0 ? padL : i === lastI ? W - padR : x(i);
+    return `<text x="${xx.toFixed(1)}" y="${H - 8}" fill="#bcc7be" font-size="11" text-anchor="${anchor}" font-family="JetBrains Mono,Courier New,monospace">${lbl(points[i].t)}</text>`;
+  }).join("");
+
   return `<div class="chartwrap">
-    <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img" aria-label="${opts.label}">
+    <svg viewBox="0 0 ${W} ${H}" style="display:block;width:100%;height:auto" role="img" aria-label="${opts.label}">
       ${grid}
       <polygon points="${area}" fill="${opts.color}" opacity="0.10"/>
       <polyline points="${line}" fill="none" stroke="${opts.color}" stroke-width="1.8"/>
       <circle cx="${x(points.length - 1).toFixed(1)}" cy="${y(points[points.length - 1].v).toFixed(1)}" r="3.5" fill="${opts.color}"/>
       ${hover}
-      <text x="${padL}" y="${H - 8}" fill="#bcc7be" font-size="11" font-family="JetBrains Mono,Courier New,monospace">${lbl(firstT)}</text>
-      <text x="${W - padR}" y="${H - 8}" fill="#bcc7be" font-size="11" text-anchor="end" font-family="JetBrains Mono,Courier New,monospace">${lbl(lastT)}</text>
+      ${xLabels}
     </svg>
     <div class="chart-tip" hidden></div>
   </div>`;
@@ -2526,7 +2637,7 @@ function svgLine(points, opts) {
    nothing sits between one day and the next for a line to pass through. Bars are
    anchored to a zero baseline for the same reason: the height is the amount. */
 function svgBars(points, opts) {
-  const W = 660, H = 190, padL = 62, padR = 14, padT = 14, padB = 30;
+  const W = 660, H = opts.height || 190, padL = 62, padR = 14, padT = 14, padB = 30;
   const vals = points.map(p => (isFinite(p.v) && p.v > 0 ? p.v : 0));
   if (!vals.length) return `<div class="empty">No data.</div>`;
   const peak = Math.max(...vals);
@@ -2548,10 +2659,10 @@ function svgBars(points, opts) {
   // an hourly window spans two dates, so the hour alone would not say which day
   const lbl = ts => new Date(ts * 1000).toLocaleString(undefined,
     opts.hourly ? { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }
-                : { month: "short", day: "numeric" });
+                : { year: "numeric", month: "short", day: "numeric" });
   const lblLong = ts => new Date(ts * 1000).toLocaleString(undefined,
     opts.hourly ? { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }
-                : { weekday: "short", month: "short", day: "numeric" });
+                : { weekday: "short", year: "numeric", month: "short", day: "numeric" });
 
   // square at the baseline, rounded at the top: the flat foot is what makes the
   // height readable as a quantity
@@ -2576,16 +2687,138 @@ function svgBars(points, opts) {
       `data-day="${lblLong(p.t)}" data-val="${readout}"${p.partial ? ' data-partial="1"' : ""}></rect></g>`;
   }).join("");
 
+  // same dates as the line chart: as many as fit, the ends anchored inside the plot
+  const WANT = 5, CHAR = 6.7;
+  const room = Math.floor(plotW / (lbl(points[0].t).length * CHAR + 18)) + 1;
+  const ticks = Math.max(2, Math.min(WANT, room, points.length));
+  const lastI = points.length - 1;
+  const idx = points.length === 1 ? [0]
+    : [...new Set(Array.from({ length: ticks }, (_, i) => Math.round(i * lastI / (ticks - 1))))];
+  const xLabels = idx.map(i => {
+    const anchor = i === 0 ? "start" : i === lastI ? "end" : "middle";
+    const xx = i === 0 ? padL : i === lastI ? W - padR : padL + i * slot + slot / 2;
+    return `<text x="${xx.toFixed(1)}" y="${H - 8}" fill="#bcc7be" font-size="11" text-anchor="${anchor}" font-family="JetBrains Mono,Courier New,monospace">${lbl(points[i].t)}</text>`;
+  }).join("");
+
   return `<div class="chartwrap">
-    <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img" aria-label="${opts.label}">
+    <svg viewBox="0 0 ${W} ${H}" style="display:block;width:100%;height:auto" role="img" aria-label="${opts.label}">
       ${grid}
       <line x1="${padL}" y1="${base.toFixed(1)}" x2="${W - padR}" y2="${base.toFixed(1)}" stroke="#35453b"/>
       ${bars}
-      <text x="${padL}" y="${H - 8}" fill="#bcc7be" font-size="11" font-family="JetBrains Mono,Courier New,monospace">${lbl(points[0].t)}</text>
-      <text x="${W - padR}" y="${H - 8}" fill="#bcc7be" font-size="11" text-anchor="end" font-family="JetBrains Mono,Courier New,monospace">${lbl(points[points.length - 1].t)}</text>
+      ${xLabels}
     </svg>
     <div class="chart-tip" hidden></div>
   </div>`;
+}
+
+/* One popover serves every caller -- the mint term field and each claim-and-reopen
+   button -- so it anchors to a rect rather than living inside one field's wrapper.
+   Resolves with a day count, or null if it was dismissed. */
+const DP = { node: null, resolve: null, view: null, min: 1, max: 1, chosen: null, anchor: null };
+
+const dpMid = d => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
+const dpDateFor = days => dpMid(new Date(Date.now() + days * 86400000));
+const dpDaysTo = d => Math.round((dpMid(d) - dpMid(new Date())) / 86400000);
+
+function dpNode() {
+  if (DP.node) return DP.node;
+  const n = el("div", "daypick");
+  n.hidden = true;
+  n.innerHTML =
+    `<div class="daypick-head">
+      <button type="button" data-dp="prev" aria-label="Previous month">&#8592;</button>
+      <span data-dp="month">—</span>
+      <button type="button" data-dp="next" aria-label="Next month">&#8594;</button>
+    </div>
+    <div class="daypick-grid" data-dp="grid"></div>
+    <div class="daypick-foot" data-dp="foot"></div>`;
+  document.body.appendChild(n);
+  n.addEventListener("click", e => {
+    e.stopPropagation();          // the outside-click handler must not see this
+    const nav = e.target.closest("button[data-dp]");
+    if (nav && !nav.disabled) {
+      DP.view = new Date(DP.view.getFullYear(), DP.view.getMonth() + (nav.dataset.dp === "prev" ? -1 : 1), 1);
+      dpRender();
+      return;
+    }
+    const cell = e.target.closest("button[data-days]");
+    if (cell && !cell.disabled) dpDone(parseInt(cell.dataset.days, 10));
+  });
+  DP.node = n;
+  return n;
+}
+
+function dpRender() {
+  const n = DP.node;
+  const first = dpDateFor(DP.min), last = dpDateFor(DP.max);
+  const chosen = DP.chosen == null ? null : dpDateFor(DP.chosen);
+  const q = k => n.querySelector(`[data-dp="${k}"]`);
+
+  q("month").textContent = DP.view.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  // a month with nothing selectable in it is a dead end, so stop the arrows there
+  q("prev").disabled = new Date(DP.view.getFullYear(), DP.view.getMonth(), 0) < first;
+  q("next").disabled = new Date(DP.view.getFullYear(), DP.view.getMonth() + 1, 1) > last;
+
+  let html = ["S", "M", "T", "W", "T", "F", "S"].map(w => `<span class="dp-head">${w}</span>`).join("");
+  const lead = new Date(DP.view.getFullYear(), DP.view.getMonth(), 1).getDay();
+  for (let i = 0; i < lead; i++) html += `<span class="dp-blank"></span>`;
+
+  const inMonth = new Date(DP.view.getFullYear(), DP.view.getMonth() + 1, 0).getDate();
+  for (let day = 1; day <= inMonth; day++) {
+    const d = dpMid(new Date(DP.view.getFullYear(), DP.view.getMonth(), day));
+    const ok = d >= first && d <= last;
+    const sel = chosen && d.getTime() === chosen.getTime();
+    html += `<button type="button" data-days="${dpDaysTo(d)}" class="${sel ? "sel" : ""}"${ok ? "" : " disabled"}` +
+      ` aria-label="${d.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}"` +
+      `>${day}</button>`;
+  }
+  q("grid").innerHTML = html;
+  q("foot").textContent = DP.chosen != null
+    ? `${DP.chosen.toLocaleString()} day${DP.chosen === 1 ? "" : "s"} from today`
+    : `${DP.min.toLocaleString()} to ${DP.max.toLocaleString()} days from today`;
+}
+
+function dpPlace() {
+  const n = DP.node;
+  if (!DP.anchor) return;
+  const r = DP.anchor.getBoundingClientRect();
+  const w = n.offsetWidth, h = n.offsetHeight;
+  // prefer below and right-aligned, but never off the edge of the window
+  let left = Math.min(Math.max(8, r.right - w), window.innerWidth - w - 8);
+  let top = r.bottom + 6;
+  if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 6);
+  n.style.left = Math.round(left) + "px";
+  n.style.top = Math.round(top) + "px";
+}
+
+function dpClose() {
+  if (DP.node) DP.node.hidden = true;
+  if (DP.anchor) DP.anchor.setAttribute("aria-expanded", "false");
+  DP.resolve = null;
+  DP.anchor = null;
+}
+
+// the waiting caller is answered exactly once, whether by a pick or a dismissal
+function dpDone(days) {
+  const r = DP.resolve;
+  dpClose();
+  if (r) r(days);
+}
+
+function pickTermDays({ anchor, min, max, value }) {
+  return new Promise(resolve => {
+    dpDone(null);                       // anything already waiting is dismissed
+    DP.resolve = resolve;
+    DP.min = min; DP.max = max; DP.anchor = anchor || null;
+    DP.chosen = Number.isInteger(value) && value >= min && value <= max ? value : null;
+    const base = dpDateFor(DP.chosen == null ? min : DP.chosen);
+    DP.view = new Date(base.getFullYear(), base.getMonth(), 1);
+    const n = dpNode();
+    n.hidden = false;
+    dpRender();
+    dpPlace();
+    if (DP.anchor) DP.anchor.setAttribute("aria-expanded", "true");
+  });
 }
 
 function renderStats() {
@@ -2647,6 +2880,12 @@ function renderStats() {
       p: s.edges.map((t, i) => ({ t, v: toEth(s.pooledSeries[i]), usd: usdPlain(s.pooledSeries[i]) })),
       color: "#96c99c", unit: "ETH",
       fmt: v => v >= 1 ? v.toFixed(3) : v.toFixed(4), zeroFloor: false },
+    { title: `${S.K.symbol} in existence`,
+      sub: `Total supply as it actually stands, walked back from the ${fmtTok(S.L.totalSupply, S.K.decimals, S.K.symbol)} ` +
+           `the contract reports now. It rises when a mint or a stake is claimed and falls when a stake is opened ` +
+           `or the protocol burns — staking destroys the principal on this token and mints it back on withdrawal.`,
+      p: pts(s.supplySeries, v => tok(v, S.K.decimals)), color: "#96c99c",
+      fmt: compact, fmtFull: exact, unit: S.K.symbol, zeroFloor: false },
     { title: "Global rank",
       sub: "One step per mint opened, across every wallet. This is what drives the reward on every position.",
       p: pts(s.rankSeries, v => Number(v)), color: "#eedc93",
@@ -2673,6 +2912,7 @@ function renderStats() {
     </div>`;
   }).join("") + `<div id="recentHost"></div>`;
   renderRecent();
+  renderInflation();
 }
 
 const RECENT_PER_PAGE = 20;
@@ -2717,8 +2957,39 @@ function renderRecent() {
    every wallet that has ever opened a mint; each of those is then read with the
    same function the positions tab uses, so the figures are identical by
    construction rather than by a second implementation agreeing with the first. */
-const TOP = { busy: false, abort: false, rows: null, scanned: 0, total: 0, complete: false, inflight: new Map(), futureSupply: null };
+const TOP = { busy: false, abort: false, rows: null, scanned: 0, total: 0, complete: false, inflight: new Map(), futureSupply: null, sort: "pending" };
 const TOP_SHOWN = 25;
+
+/* Sorting is a view over rows already in hand, not a re-read: every field the
+   list shows was gathered by the scan, so reordering costs nothing and never
+   sends a request. Ties fall back to pending, so equal keys keep a stable order
+   rather than shuffling between renders. */
+const cmpBig = (x, y) => (x > y ? 1 : x < y ? -1 : 0);
+
+// soonest first, with "nothing scheduled" pushed to the end rather than treated as zero
+const nextUnlockKey = r => (r.nextUnlock == null ? Infinity : Number(r.nextUnlock));
+
+// ETH paid per FUEL still owed; a wallet with no fee data sorts last either way
+function costRatio(r) {
+  if (!r.spent || r.spent <= 0n || !r.pending || r.pending <= 0n) return Infinity;
+  const eth = Number(E.formatEther(r.spent));
+  const fuel = Number(E.formatUnits(r.pending, S.K.decimals ?? 18));
+  return fuel > 0 ? eth / fuel : Infinity;
+}
+
+const TOP_SORTS = {
+  pending: (a, b) => cmpBig(b.pending, a.pending),
+  mints:   (a, b) => b.mints - a.mints,
+  unlock:  (a, b) => nextUnlockKey(a) - nextUnlockKey(b),
+  overdue: (a, b) => b.overdue - a.overdue,
+  spent:   (a, b) => cmpBig(b.spent, a.spent),
+  cost:    (a, b) => costRatio(a) - costRatio(b)
+};
+
+function sortTopRows(rows) {
+  const cmp = TOP_SORTS[TOP.sort] || TOP_SORTS.pending;
+  return rows.slice().sort((a, b) => cmp(a, b) || cmpBig(b.pending, a.pending));
+}
 
 function topSay(msg) { const n = $("#topMsg"); if (n) n.textContent = msg; }
 
@@ -2741,10 +3012,10 @@ async function loadTopHolders() {
   if (TOP.busy) return;
   TOP.busy = true;
   TOP.abort = false;
-  const bar = $("#topBar"), btn = $("#btnTopLoad");
+  const btn = $("#btnTopLoad");
   if (btn) { btn.disabled = true; btn.textContent = "Loading…"; }
   try {
-    renderProgress(bar, 0);
+    topProgress(0);
     topSay("Looking for wallets that have minted…");
     // From the genesis block, which for this purpose is zero: the batch minter has
     // no logs from before it was deployed, so searching for its start block costs
@@ -2774,7 +3045,7 @@ async function loadTopHolders() {
         // Indeterminate rather than a slice of the bar: finding holders is one
         // log query now and is over almost at once, so giving it a share of the
         // percentage only made the bar open at 40 and crawl from there.
-        renderProgress(bar, null);
+        topProgress(null);
         topSay(`Finding holders… ${pct}% of the chain · ${owners.size} found`);
       });
       for (const lg of res.logs) {
@@ -2803,7 +3074,7 @@ async function loadTopHolders() {
       const wait = Math.min(15, 3 + pass);
       for (let k = wait; k > 0 && !TOP.abort; k--) {
         topSay(`Rate limited while finding holders — resuming in ${k}s. ${owners.size} found so far.`);
-        renderProgress(bar, null);
+        topProgress(null);
         await sleep(1000);
       }
     }
@@ -2858,7 +3129,7 @@ async function loadTopHolders() {
       renderInflight();
       done++;
       TOP.scanned = done;
-      renderProgress(bar, Math.round(done / list.length * 100));
+      topProgress(Math.round(done / list.length * 100));
       topSay(`Reading positions… ${done} of ${list.length} wallets`);
       rows.sort((a, b) => (b.pending > a.pending ? 1 : b.pending < a.pending ? -1 : 0));
       TOP.rows = rows.slice();
@@ -2868,7 +3139,7 @@ async function loadTopHolders() {
     // said before the first read starts, not after it finishes — the biggest wallet
     // goes first and takes the longest, which otherwise looks like a stall
     topSay(`Reading positions… 0 of ${list.length} wallets`);
-    renderProgress(bar, 0);
+    topProgress(0);
 
     /* A few wallets in flight at once. Each one is mostly waiting on a round trip,
        and the endpoint pool paces itself, so overlapping them fills the gaps
@@ -2908,8 +3179,9 @@ async function loadTopHolders() {
     TOP.busy = false;
     TOP.inflight.clear();
     renderInflight();
-    hideProgress(bar);
+    topHideProgress();
     if (btn) { btn.disabled = false; btn.textContent = TOP.rows ? "Reload list" : "Load list"; }
+    renderInflation();   // only now is the scan really finished
   }
 }
 
@@ -2918,7 +3190,186 @@ async function loadTopHolders() {
 const openHolders = new Set();
 const holderBatches = new Map();
 
+/* Every open mint protocol-wide, bucketed by the day it matures and accumulated
+   onto today's supply. No contract view returns this schedule, so it is assembled
+   from the positions the Top Minters scan already read -- which is why the chart
+   cannot be drawn until that scan has run.
+
+   Values match what pendingFuel counts, late penalty and all, so the last point on
+   the line is exactly the future supply quoted under the list. Two figures on one
+   tab that disagreed would be worse than either of them alone. */
+/* The chart and the Top Minters list are filled by the same scan, so either panel
+   can start it and both have to show it running. The bar is mirrored rather than
+   duplicated -- one scan, two readouts. */
+const TOP_BARS = ["#topBar", "#inflBar"];
+function topProgress(pct) { for (const sel of TOP_BARS) renderProgress($(sel), pct); }
+function topHideProgress() { for (const sel of TOP_BARS) hideProgress($(sel)); }
+
+function inflationSchedule() {
+  const rows = TOP.rows;
+  if (!rows || !rows.length || S.L.totalSupply == null) return null;
+
+  const now = chainNow();
+  const mints = [];
+  for (const r of rows) {
+    const list = [];
+    for (const b of (r.batches || [])) for (const p of (b.items || [])) list.push(p);
+    if (r.soloMint) list.push(r.soloMint);
+    for (const p of list) {
+      if (p.gross == null) continue;
+      const late = now - Number(p.maturityTs);
+      mints.push({ ts: Number(p.maturityTs), v: late > 0 ? netAfterPenalty(p.gross, late) : p.gross });
+    }
+  }
+  if (!mints.length) return null;
+
+  const DAY = 86400;
+  const last = mints.reduce((a, m) => Math.max(a, m.ts), 0);
+  if (last <= now) return { allDue: true, due: mints.reduce((a, m) => a + m.v, 0n), count: mints.length };
+
+  /* One bucket per day. The columns get thin over a long span, but widening the
+     bucket hides the shape of the schedule -- a single day's cliff spread over
+     three reads as a gentle slope. The ceiling is only there so a pathological
+     term cannot ask the DOM for tens of thousands of nodes. */
+  const spanDays = Math.ceil((last - now) / DAY);
+  const stepDays = spanDays > 1500 ? Math.ceil(spanDays / 1500) : 1;
+  const step = stepDays * DAY;
+  const count = Math.ceil((last - now) / step);
+
+  const add = new Array(count + 1).fill(0n);
+  let overdue = 0n, overdueCount = 0;
+  for (const m of mints) {
+    // already matured: claimable today, so it lands in the first step rather than the past
+    if (m.ts <= now) { overdue += m.v; overdueCount++; add[1] += m.v; continue; }
+    add[Math.min(count, Math.ceil((m.ts - now) / step))] += m.v;
+  }
+
+  const pts = [];
+  let run = S.L.totalSupply;
+  for (let i = 0; i <= count; i++) {
+    run += add[i];
+    pts.push({ t: now + i * step, v: run });
+  }
+  // the same buckets the line accumulates, kept as increments for the column chart
+  const bars = add.map((v, i) => ({ t: now + i * step, v }));
+  return { pts, bars, stepDays, spanDays, overdue, overdueCount, mints: mints.length, end: run };
+}
+
+function renderInflation() {
+  const host = $("#inflationHost");
+  if (!host) return;
+
+  const TITLE = "Future supply from open mints";
+  const LEAD = "Every mint still open, laid out by the day it matures, stacked onto the " +
+    "supply that exists today.";
+
+  /* Mid-scan the bar is a live element topProgress writes into, so the shell must
+     not be rebuilt underneath it -- past the first pass only the message changes. */
+  if (TOP.busy) {
+    if (host.dataset.state === "busy") {
+      const m = $("#inflMsg");
+      if (m) m.textContent = ($("#topMsg") || {}).textContent || "Reading\u2026";
+      return;
+    }
+    host.dataset.state = "busy";
+    host.innerHTML =
+      `<div class="panel">
+        <h3>${TITLE}</h3>
+        <p class="note">${LEAD} It is held back until every wallet has been read \u2014 a
+          partial scan would understate it. This is the same read the Top Minters list uses,
+          so both fill together.</p>
+        <div id="inflBar" class="progress"></div>
+        <div id="inflMsg" class="derived">Reading\u2026</div>
+      </div>`;
+    topProgress(0);
+    return;
+  }
+
+  host.dataset.state = "idle";
+  const shell = (noteHtml, label, tail) =>
+    `<div class="panel">
+      <h3>${TITLE}</h3>
+      <div class="row" style="align-items:flex-start">
+        <p class="note" style="flex:1;margin:0">${noteHtml}</p>
+        <button class="btn sm fixed" id="btnInflLoad">${label}</button>
+      </div>
+      <div id="inflBar" class="progress" hidden></div>
+      ${tail || ""}
+    </div>`;
+
+  if (!TOP.rows) {
+    host.innerHTML = shell(
+      LEAD + " Building it means reading every wallet's open positions, which takes a few " +
+      "minutes on the public RPCs, so it only runs when you ask. It shares that read with the " +
+      "Top Minters list below \u2014 loading either one fills both.",
+      "Load chart");
+    return;
+  }
+
+  const sch = inflationSchedule();
+  if (!sch) { host.innerHTML = shell("No open mints found, so nothing is owed yet.", "Reload"); return; }
+  if (sch.allDue) {
+    host.innerHTML = shell(
+      `Every open mint has already matured \u2014 ${fmtTok(sch.due, S.K.decimals, S.K.symbol)} across ` +
+      `${sch.count.toLocaleString()} of them is claimable now, with nothing scheduled ahead.`,
+      "Reload");
+    return;
+  }
+
+  const dec = S.K.decimals ?? 18;
+  const tok = v => Number(E.formatUnits(v < 0n ? 0n : v, dec));
+  const compact = v => {
+    if (v >= 1e12) return (v / 1e12).toFixed(2) + "T";
+    if (v >= 1e9) return (v / 1e9).toFixed(2) + "B";
+    if (v >= 1e6) return (v / 1e6).toFixed(2) + "M";
+    if (v >= 1e3) return (v / 1e3).toFixed(1) + "K";
+    return v.toFixed(0);
+  };
+  const exact = v => v.toLocaleString(undefined, { maximumFractionDigits: 0 });
+
+  // how many times over today's supply the open mints would take it
+  const mult = S.L.totalSupply > 0n ? Number(sch.end * 100n / S.L.totalSupply) / 100 : null;
+  const multTxt = mult == null ? "" :
+    `, about <strong>${mult.toLocaleString(undefined, { maximumFractionDigits: mult >= 100 ? 0 : 1 })}\u00d7</strong> today's supply`;
+  const stepTxt = sch.stepDays > 1 ? `, read at ${sch.stepDays}-day steps` : "";
+  const overdueTxt = sch.overdueCount
+    ? ` The first step also carries ${fmtTok(sch.overdue, dec, S.K.symbol)} from ` +
+      `${sch.overdueCount.toLocaleString()} mint${sch.overdueCount === 1 ? "" : "s"} already past ` +
+      "maturity, net of the late penalty they have run up."
+    : "";
+  const partialTxt = TOP.complete ? "" :
+    " The wallet scan did not finish, so this is a floor on what is already owed.";
+
+  const opts = { fmt: compact, fmtFull: exact, color: "#b2e5ba", unit: S.K.symbol,
+                 label: TITLE, bucketH: 24, zeroFloor: true, height: 250 };
+  const pts = sch.pts.map(p => ({ t: p.t, v: tok(p.v), usd: fuelUsdPlain(p.v) }));
+
+  /* The columns are the increments the line accumulates -- same buckets, same
+     values, read either as "how much arrives" or "where supply gets to". */
+  const stepWord = sch.stepDays === 1 ? "day" : sch.stepDays + "-day step";
+  const barPts = sch.bars.map(b => ({ t: b.t, v: tok(b.v), usd: fuelUsdPlain(b.v) }));
+  const peak = sch.bars.reduce((a, b) => (b.v > a.v ? b : a));
+  const barOpts = { fmt: compact, fmtFull: exact, color: "#b2e5ba", unit: S.K.symbol,
+                    label: `${S.K.symbol} minted per ${stepWord}`, hourly: false, height: 250 };
+
+  host.innerHTML = shell(
+    `Supply as it stands today, plus every mint still open added on the day it matures.
+     It ends at <strong>${fmtTok(sch.end, dec, S.K.symbol)}</strong>${multTxt}, across
+     ${sch.mints.toLocaleString()} open mint${sch.mints === 1 ? "" : "s"} over the next
+     ${sch.spanDays.toLocaleString()} day${sch.spanDays === 1 ? "" : "s"}${stepTxt}.${overdueTxt}
+     This is only what is <em>already</em> committed \u2014 mints opened from today on add to
+     it, so read the line as a floor rather than a forecast.${partialTxt}`,
+    "Reload",
+    svgLine(pts, opts) +
+    `<h3 style="margin:26px 0 10px">${S.K.symbol} minted per ${stepWord}</h3>
+     <p class="note">What each ${stepWord} actually brings, rather than where the running total
+       gets to \u2014 these columns are the steps the line above adds up. The heaviest is
+       <strong>${fmtTok(peak.v, dec, S.K.symbol)}</strong> on ${fmtDate(peak.t)}.</p>` +
+    svgBars(barPts, barOpts));
+}
+
 function renderTopHolders() {
+  renderInflation();
   const host = $("#topList");
   if (!host) return;
   const rows = TOP.rows;
@@ -2929,7 +3380,7 @@ function renderTopHolders() {
   const now = chainNow();
   const mine = S.account ? S.account.toLowerCase() : null;
 
-  rows.slice(0, TOP_SHOWN).forEach((r, i) => {
+  sortTopRows(rows).slice(0, TOP_SHOWN).forEach((r, i) => {
     const open = openHolders.has(r.address);
     const isMine = mine && r.address.toLowerCase() === mine;
     const when = r.overdue
@@ -2945,7 +3396,7 @@ function renderTopHolders() {
     const shareTxt = share == null ? "pending"
       : `${share >= 0.01 ? share.toFixed(2) : share.toPrecision(1)}% of future supply`;
 
-    const box = el("div", "batch" + (r.overdue ? " late" : ""));
+    const box = el("div", "batch holder" + (open ? " open" : "") + (r.overdue ? " late" : ""));
     const head = el("button", "batch-head");
     head.setAttribute("aria-expanded", String(open));
     head.innerHTML = `
@@ -3316,15 +3767,13 @@ async function doMint() {
   await send("Mint", () => c.batchClaimRank(start, count, term, { value: withBuffer(fee) }));
 }
 
-async function doClaimRemint(run) {
-  const signer = await guard();
+async function doClaimRemint(run, anchor) {
   const minT = minTermDays(), maxT = maxMintTermDays();
-  const raw = prompt(`New term in days (${minT} to ${maxT})`, String(maxT));
-  if (raw === null) return;
-  const parsed = parseInt(raw, 10);
-  if (!Number.isFinite(parsed)) { toast("That is not a number of days.", "err"); return; }
-  const term = clampTerm(parsed, minT, maxT);
-  if (term !== parsed) toast(`Term adjusted to ${term} days — the contract accepts ${minT} to ${maxT}.`);
+  /* The date is chosen before the wallet is touched: backing out of the calendar
+     should not have cost you a connection prompt. */
+  const term = await pickTermDays({ anchor, min: minT, max: maxT, value: maxT });
+  if (term == null) return;
+  const signer = await guard();
   const gp = await liveGas();
   const c = new E.Contract(A.batchMinter, ABI.batchMinter, signer);
   const claimFee = await c.batchClaimFee(BigInt(run.count), gp);
@@ -3392,29 +3841,64 @@ try {
 
   on("#btnConnect", "click", connect);
 
+  on("#mintCalBtn", "click", async e => {
+    e.stopPropagation();
+    const btn = e.currentTarget;
+    if (btn.getAttribute("aria-expanded") === "true") { dpDone(null); return; }
+    const minT = minTermDays(), maxT = maxMintTermDays();
+    const days = await pickTermDays({ anchor: btn, min: minT, max: maxT,
+                                      value: parseInt($("#mintTermNum").value || "0", 10) });
+    if (days == null) return;
+    $("#mintTermNum").value = days;
+    $("#mintTerm").value = days;
+    quoteMint();
+  });
+
+  // dismissing it resolves the waiting caller with null, so nothing is left hanging
+  document.addEventListener("click", e => {
+    if (!DP.node || DP.node.hidden) return;
+    if (DP.anchor && (e.target === DP.anchor || DP.anchor.contains(e.target))) return;
+    if (!DP.node.contains(e.target)) dpDone(null);
+  });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && DP.node && !DP.node.hidden) dpDone(null);
+  });
+  window.addEventListener("resize", () => { if (DP.node && !DP.node.hidden) dpPlace(); });
+
+  renderInflation();
+
   /* Delegated, because the charts are rebuilt wholesale after every scan pass and
      any handler bound to a bar would be thrown away with it. */
-  on("#statsCharts", "pointermove", e => {
-    const hit = e.target.closest?.(".charthit");
-    const wrap = hit && hit.closest(".chartwrap");
-    const tip = wrap && wrap.querySelector(".chart-tip");
-    // every other tip goes first: moving straight from one chart into the next
-    // would otherwise leave the one behind it still showing
-    $$("#statsCharts .chart-tip").forEach(t => { if (t !== tip) t.hidden = true; });
-    if (!tip) return;
-    tip.innerHTML = `${hit.dataset.day}<span class="v">${hit.dataset.val}</span>` +
-      (hit.dataset.partial ? `<span class="part">still counting</span>` : "");
-    const box = wrap.getBoundingClientRect();
-    tip.style.left = Math.round(e.clientX - box.left) + "px";
-    tip.style.top = Math.round(e.clientY - box.top) + "px";
-    tip.hidden = false;
-  });
-  on("#statsCharts", "pointerleave", () => {
-    $$("#statsCharts .chart-tip").forEach(t => { t.hidden = true; });
+  /* Charts sit in two hosts -- the scan charts and the supply chart -- and a tip
+     has to clear when the pointer crosses from one host into the other, so the
+     sweep runs over both rather than within whichever one was entered. */
+  const CHART_HOSTS = ["#statsCharts", "#inflationHost"];
+  const clearTips = keep =>
+    CHART_HOSTS.forEach(h => $$(h + " .chart-tip").forEach(t => { if (t !== keep) t.hidden = true; }));
+
+  CHART_HOSTS.forEach(sel => {
+    on(sel, "pointermove", e => {
+      const hit = e.target.closest?.(".charthit");
+      const wrap = hit && hit.closest(".chartwrap");
+      const tip = wrap && wrap.querySelector(".chart-tip");
+      clearTips(tip);
+      if (!tip) return;
+      tip.innerHTML = `${hit.dataset.day}<span class="v">${hit.dataset.val}</span>` +
+        (hit.dataset.partial ? `<span class="part">still counting</span>` : "");
+      const box = wrap.getBoundingClientRect();
+      tip.style.left = Math.round(e.clientX - box.left) + "px";
+      tip.style.top = Math.round(e.clientY - box.top) + "px";
+      tip.hidden = false;
+    });
+    on(sel, "pointerleave", () => clearTips(null));
   });
 
   on("#btnStatsRefresh", "click", restartStats);
   on("#btnTopLoad", "click", restartTopHolders);
+  on("#topSort", "change", e => { TOP.sort = e.target.value; renderTopHolders(); });
+  on("#inflationHost", "click", e => {
+    if (e.target.closest("#btnInflLoad")) restartTopHolders();
+  });
   on("#statsRange", "change", () => {
     // changing the window invalidates what is drawn, but does not start a new scan
     STATS.series = null;
