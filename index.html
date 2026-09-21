@@ -225,6 +225,10 @@ input[type=range]{width:100%;accent-color:var(--accent-dim)}
 .batch-body .pos{background:var(--bg)}
 .run{border-left:2px solid var(--amber);padding-left:14px;margin:16px 0;font-family:var(--sans);font-size:13px}
 .run strong{font-family:var(--serif);font-weight:400;color:var(--accent)}
+.run .quote{margin:10px 0 0;padding-left:0;border-left:0}
+.run .quote .line.total{border-top:1px solid var(--line);margin-top:4px;padding-top:7px;color:var(--text)}
+.run .quote .line.total strong{color:var(--neon)}
+.batch .meta .cost{color:var(--amber)}
 
 .pill{display:inline-block;border:1px solid var(--line);padding:1px 8px;font-family:var(--mono);font-size:11px;color:var(--text-dim);letter-spacing:.02em}
 .pill.safe{color:var(--green);border-color:rgba(178,229,186,.5)}
@@ -387,8 +391,12 @@ header.top .mark .txt{color:var(--neon);text-shadow:0 0 14px rgba(57,255,20,.45)
   <section class="tab" id="tab-positions">
     <div class="panel">
       <h3>Your mints</h3>
-      <p class="note" id="posNote">Mints opened in the same transaction are grouped together. Open a group to see the individual mints inside it.</p>
+      <p class="note" id="posNote">Mints opened in the same transaction are grouped together. Open a group to see the individual mints inside it. Anything claimable shows what claiming and reopening it would cost, fees and gas together, next to what it pays out.</p>
       <p class="note" id="rankBasis" style="margin-top:-10px"></p>
+      <div id="posBar" class="progress" hidden></div>
+      <div id="ownStats"></div>
+      <div id="posRuns"></div>
+      <hr id="ownStatsRule" style="display:none">
       <div class="row" style="margin-bottom:14px">
         <label class="fixed" style="flex:none;color:var(--muted);font-size:13px">
           <input type="checkbox" id="onlyClaimable" style="width:auto"> Only claimable
@@ -396,11 +404,7 @@ header.top .mark .txt{color:var(--neon);text-shadow:0 0 14px rgba(57,255,20,.45)
         <span style="flex:1"></span>
         <button class="btn sm fixed" id="btnReload">Reload</button>
       </div>
-      <div id="posBar" class="progress" hidden></div>
-      <div id="ownStats"></div>
-      <hr id="ownStatsRule" style="display:none">
       <div id="posList"><div class="empty">Connect a wallet to load your mints.<br>Or paste your address below.</div></div>
-      <div id="posRuns"></div>
     </div>
 
     <div class="panel">
@@ -540,7 +544,8 @@ header.top .mark .txt{color:var(--neon);text-shadow:0 0 14px rgba(57,255,20,.45)
       <a class="btn fixed has-mark" href="https://willis5555.github.io/MOREDASHBOARD/"
          target="_blank" rel="noopener"><img class="btn-mark" src="data:image/png;base64,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" alt="$MORE">STAKING</a>
       <a class="btn fixed has-mark" href="https://willis5555.github.io/PAMP/"
-         target="_blank" rel="noopener"><img src="data:image/png;base64,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" alt="" style="height:20px;width:auto">PAMP DAILY AUCTIONS <span class="newtag">NEW!</span></a>
+         title="$PAMP v2: enter with ETH + $FUEL. Every entry burns $FUEL and buys and burns $MORE in the same transaction. 1,000 daily auctions, no premint, no owner, staking 7–1,000 days."
+         target="_blank" rel="noopener"><img src="data:image/png;base64,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" alt="" style="height:20px;width:auto">PAMP DAILY AUCTIONS <span class="newtag">LIVE</span></a>
     </div>
   </div>
 
@@ -763,22 +768,21 @@ function fuelUsdSuffix(amount) {
   return s ? ` (${s})` : "";
 }
 
-/* What the mints cost to open, set against what they will pay out. Per single
-   FUEL this lands in millionths of a cent, so it is quoted against whichever
-   parcel — one, a thousand, a million — first puts it above a cent. */
+/* What the mints cost to open, set against what they will pay out — quoted per
+   single token. One FUEL costs a tiny fraction of a cent, so a fixed two decimals
+   would round every one of these to $0.00; the decimals are chosen instead from
+   the magnitude, enough to carry three significant figures, then trimmed. */
 function costPerFuelLabel(spentWei, pendingFuel) {
   if (!ETH_USD || spentWei == null || spentWei <= 0n || pendingFuel == null || pendingFuel <= 0n) return null;
   const fuel = Number(E.formatUnits(pendingFuel, S.K.decimals ?? 18));
   const usd = Number(E.formatEther(spentWei)) * ETH_USD;
   if (!(fuel > 0) || !(usd > 0)) return null;
   const perFuel = usd / fuel;
-  for (const [size, unit] of [[1, "FUEL"], [1e3, "1K FUEL"], [1e6, "1M FUEL"], [1e9, "1B FUEL"]]) {
-    const v = perFuel * size;
-    // fixed to the cent: these sit side by side down a column and are read against
-    // each other, which ragged decimals make harder than it needs to be
-    if (v >= 0.01) return `$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} per ${unit}`;
-  }
-  return null;
+  if (!isFinite(perFuel) || perFuel <= 0) return null;
+  const dp = perFuel >= 0.01 ? 2
+    : Math.min(18, Math.max(4, 2 - Math.floor(Math.log10(perFuel))));
+  const txt = perFuel.toFixed(dp).replace(/(\.\d*?[1-9])0+$/, "$1").replace(/\.0*$/, "");
+  return `$${txt} per ${S.K.symbol || "FUEL"}`;
 }
 
 /* Carries a dollar value for the protocol's own token, the same way fmtEth does
@@ -1797,7 +1801,7 @@ function batchCard(b, now, opts) {
     <span class="twist">${open ? "▼" : "▶"}</span>
     <span>
       <span class="when">${due ? (pct > 0 ? `${pct}% penalty` : "Claimable, no penalty") : fmtDur(Number(b.maturityTs) - now)}</span>
-      <span class="meta">${b.count === 1 ? "one mint" : `${b.count} mints opened together`} · ${b.count === 1 ? "#" + b.start : `#${b.start}–${b.start + b.count - 1}`} · ${Number(b.term)}-day term · rank ${Number(b.rankLo).toLocaleString()}${b.rankHi !== b.rankLo ? "–" + Number(b.rankHi).toLocaleString() : ""}${S.L.globalRank != null && S.L.globalRank > b.rankHi ? ` (+${Number(S.L.globalRank - b.rankHi).toLocaleString()} since)` : ""} · ${fmtDate(b.maturityTs)}</span>
+      <span class="meta">${b.count === 1 ? "one mint" : `${b.count} mints opened together`} · ${b.count === 1 ? "#" + b.start : `#${b.start}–${b.start + b.count - 1}`} · ${Number(b.term)}-day term · rank ${Number(b.rankLo).toLocaleString()}${b.rankHi !== b.rankLo ? "–" + Number(b.rankHi).toLocaleString() : ""}${S.L.globalRank != null && S.L.globalRank > b.rankHi ? ` (+${Number(S.L.globalRank - b.rankHi).toLocaleString()} since)` : ""} · ${fmtDate(b.maturityTs)}</span>${!readOnly ? ` <span class="cost" data-cost-start="${b.start}" data-cost-count="${b.count}" data-cost-due="${due ? 1 : 0}" data-cost-net="${net ?? ""}">· costing…</span>` : ""}
     </span>
     <span class="amt">${fmtTok(net, S.K.decimals, S.K.symbol)}
       <small>${due
@@ -1860,7 +1864,14 @@ function renderPositions() {
     if (last && b.start === last.start + last.count) { last.count += b.count; last.batches++; }
     else runs.push({ start: b.start, count: b.count, batches: 1 });
   });
-  if (!runs.length) { runsHost.innerHTML = ""; return; }
+  if (!runs.length) { runsHost.innerHTML = ""; fillBatchCosts(); return; }
+
+  // what each run pays out right now, for setting the cost against
+  runs.forEach(run => {
+    const inRun = claimable.filter(b => b.start >= run.start && b.start < run.start + run.count);
+    run.net = inRun.some(b => b.gross == null) ? null
+      : inRun.reduce((a, b) => a + netAfterPenalty(b.gross, now - Number(b.maturityTs)), 0n);
+  });
 
   const merged = runs.some(r => r.batches > 1);
   runsHost.innerHTML = `<hr><h3 style="font-size:11px;margin:0 0 8px">Claim and reopen</h3>
@@ -1868,11 +1879,13 @@ function renderPositions() {
       ${runs.length === 1
         ? (merged ? "Everything claimable sits on neighbouring indexes, so one transaction covers it all."
                   : "One transaction covers this.")
-        : `Your claimable mints fall into ${runs.length} runs of neighbouring indexes, so this takes ${runs.length} transactions.`}</p>`;
+        : `Your claimable mints fall into ${runs.length} runs of neighbouring indexes, so this takes ${runs.length} transactions.`}
+      The cost below is the protocol's two fees plus the network gas the transaction is expected to use, at the current gas price.</p>`;
   runs.forEach((run, n) => {
     const box = el("div", "run");
     box.innerHTML = `<div><strong>${run.batches === 1 ? "1 batch" : run.batches + " batches"} · ${run.count.toLocaleString()} mint${run.count === 1 ? "" : "s"}</strong> · indexes ${run.start}–${run.start + run.count - 1}
-        <div class="addr" id="runFee${n}">quoting…</div></div>`;
+        ${run.net != null ? ` · pays out ${fmtTok(run.net, S.K.decimals, S.K.symbol)} now` : ""}</div>
+      <div class="quote" id="runCost${n}"><div class="line"><span>Estimated claim + reopen cost</span><strong>quoting…</strong></div></div>`;
     const bar = el("div", "row"); bar.style.marginTop = "10px";
     const b = el("button", "btn primary", "Claim and reopen");
     b.onclick = () => doClaimRemint(run, b);
@@ -1881,19 +1894,137 @@ function renderPositions() {
     runsHost.appendChild(box);
     quoteRun(run, n);
   });
+  fillBatchCosts();
+}
+
+/* ---- what a claim-and-reopen costs ----
+   Three parts: the protocol's claim fee and mint fee (both quoted by the contract from
+   the gas price, so they move with it) and the network gas the transaction itself
+   burns, estimated against the chain with the connected wallet as sender. Cached per
+   run and gas price, because the same figure is drawn on the run card and on every
+   batch card inside it. */
+const COST = new Map();
+/* Gas per mint, learned from the last successful simulation. A batch that has not
+   matured cannot be simulated (the contract refuses before the unlock date), so its
+   gas is projected from this instead, and marked as such. */
+let GAS_UNITS_PER_MINT = null;
+async function quoteCost(start, count, due = true) {
+  const gp = S.gasPrice || 0n;
+  if (!gp) return null;
+  const key = `${start}:${count}:${gp}:${due ? 1 : 0}`;
+  if (COST.has(key)) return COST.get(key);
+  const job = (async () => {
+    const r = await mc([
+      { to: A.batchMinter, iface: I.batch, fn: "batchClaimFee", args: [BigInt(count), gp] },
+      { to: A.batchMinter, iface: I.batch, fn: "batchFee", args: [BigInt(count), gp] }
+    ]);
+    if (r[0] == null || r[1] == null) return null;
+    const claim = r[0], mint = r[1];
+    let gas = null, projected = false;
+    if (S.account && due) {
+      try {
+        const data = I.batch.encodeFunctionData("batchClaimAndRemint", [BigInt(start), BigInt(count), BigInt(maxMintTermDays())]);
+        const units = BigInt(await rpcRetry(p => p.estimateGas({ from: S.account, to: A.batchMinter, data, value: withBuffer(claim + mint) })));
+        gas = units * gp;
+        GAS_UNITS_PER_MINT = units / BigInt(count);
+      } catch (_) { gas = null; }   // a wallet short of ETH cannot be simulated; the fees still can
+    }
+    if (gas == null && GAS_UNITS_PER_MINT != null) { gas = GAS_UNITS_PER_MINT * BigInt(count) * gp; projected = true; }
+    return { claim, mint, gas, total: claim + mint + (gas ?? 0n), gasKnown: gas != null, projected };
+  })();
+  COST.set(key, job);
+  job.then(v => { if (v == null) COST.delete(key); }, () => COST.delete(key));
+  return job;
+}
+
+/* Cost as a share of the payout, when both can be priced in dollars. */
+function costShare(costWei, payoutFuel) {
+  const p = fuelUsdPrice();
+  if (!ETH_USD || p == null || costWei == null || payoutFuel == null || payoutFuel <= 0n) return null;
+  const c = Number(E.formatEther(costWei)) * ETH_USD;
+  const v = Number(E.formatUnits(payoutFuel, S.K.decimals ?? 18)) * p;
+  return v > 0 ? (c / v) * 100 : null;
 }
 
 async function quoteRun(run, n) {
-  if (!S.gasPrice) return;
-  const r = await mc([
-    { to: A.batchMinter, iface: I.batch, fn: "batchClaimFee", args: [BigInt(run.count), S.gasPrice] },
-    { to: A.batchMinter, iface: I.batch, fn: "batchFee", args: [BigInt(run.count), S.gasPrice] }
-  ]);
-  const node = $(`#runFee${n}`);
+  const q = await quoteCost(run.start, run.count).catch(() => null);
+  const node = $(`#runCost${n}`);
   if (!node) return;
-  node.textContent = (r[0] != null && r[1] != null)
-    ? `fee ${fmtEth(r[0] + r[1])} at current gas — claim plus the new mint`
-    : "fee unavailable";
+  if (!q) { node.innerHTML = `<div class="line"><span>Estimated claim + reopen cost</span><strong>unavailable</strong></div>`; return; }
+  const share = costShare(q.total, run.net);
+  const perMint = q.total / BigInt(run.count);
+  node.innerHTML = `
+    <div class="line"><span>Claim fee (protocol)</span><strong>${fmtEth(q.claim)}</strong></div>
+    <div class="line"><span>Mint fee for the reopened mints (protocol)</span><strong>${fmtEth(q.mint)}</strong></div>
+    <div class="line"><span>Network gas (${q.projected ? "projected from a simulated batch" : "estimated"})</span><strong>${q.gasKnown ? fmtEth(q.gas) : "could not estimate"}</strong></div>
+    <div class="line total"><span>Estimated claim + reopen cost${q.gasKnown ? "" : " (fees only)"}</span><strong>${fmtEth(q.total)}</strong></div>
+    <div class="derived">${fmtEth(perMint, 6)} per mint${share != null ? ` · ${share < 0.01 ? "under 0.01" : share.toFixed(2)}% of what this run pays out` : ""}. Fees re-quote at send time and surplus refunds in the same transaction; gas is the chain's own estimate at the current price.</div>`;
+}
+
+/* The same figure, one line, on each claimable batch card. */
+/* What it costs to OPEN a batch -- the protocol fee plus the network gas -- the
+   other half of the round trip that quoteCost already prices. Cached the same way
+   and keyed on the gas price, since both move with it. */
+const OPEN_FEE = new Map();
+async function openCostWei(count, gp) {
+  if (!count || !gp) return null;
+  const key = count + ":" + gp;
+  if (!OPEN_FEE.has(key)) {
+    const job = (async () => {
+      const r = await mc([{ to: A.batchMinter, iface: I.batch, fn: "batchFee", args: [BigInt(count), gp] }]);
+      return r[0] ?? null;
+    })();
+    OPEN_FEE.set(key, job);
+    job.then(v => { if (v == null) OPEN_FEE.delete(key); }, () => OPEN_FEE.delete(key));
+  }
+  const fee = await OPEN_FEE.get(key);
+  if (fee == null) return null;
+  /* Only the fee is cached. Caching the gas alongside it froze a batch on "gas
+     unknown" for the rest of the session whenever the first read happened to fail,
+     even once the per-mint figure had been learned. openGasWei caches its own. */
+  const gas = await openGasWei(count, gp).catch(() => null);
+  return { fee, gas, total: fee + (gas ?? 0n), gasKnown: gas != null };
+}
+
+function fillBatchCosts() {
+  const nodes = [...document.querySelectorAll("[data-cost-start]")];
+  // matured batches first: their simulations teach the per-mint gas the others are projected from
+  nodes.sort((a, b) => Number(b.dataset.costDue) - Number(a.dataset.costDue));
+  (async () => {
+    for (const node of nodes) {
+      const start = Number(node.dataset.costStart), count = Number(node.dataset.costCount), due = node.dataset.costDue === "1";
+      const q = await quoteCost(start, count, due).catch(() => null);
+      const o = await openCostWei(count, S.gasPrice || 0n).catch(() => null);
+      if (!node.isConnected) continue;
+
+      /* The whole round trip: fee and gas to open these mints, then fee and gas to
+         claim and reopen them. Divided by the FUEL they pay out, that is what each
+         token actually costs. */
+      const raw = node.dataset.costNet;
+      const netFuel = raw ? BigInt(raw) : null;
+      const allIn = (q && o) ? q.total + o.total : null;
+      const per = allIn != null ? costPerFuelLabel(allIn, netFuel) : null;
+
+      /* The ETH figure is the claim and remint alone — what this batch still has
+         left to cost. The cost per token beside it is on a wider basis: a token is
+         only as cheap as the whole round trip that produced it, opening included,
+         so that one is tagged all-in and the two are never read as one number. */
+      if (q) {
+        node.title =
+          `Claim and remint: ${fmtEth(q.total, 6, false)} (claim ${fmtEth(q.claim, 6, false)}, ` +
+          `remint ${fmtEth(q.mint, 6, false)}${q.gasKnown ? " + gas " + fmtEth(q.gas, 6, false) : ", gas unknown"}).` +
+          (o ? ` The cost per ${S.K.symbol || "token"} also counts what these mints cost to open — ` +
+               `${fmtEth(o.total, 6, false)} (fee ${fmtEth(o.fee, 6, false)}` +
+               `${o.gasKnown ? " + gas " + fmtEth(o.gas, 6, false) : ", gas unknown"}) — ` +
+               `so ${fmtEth(allIn, 6, false)} all in.` : "") +
+          ` Re-quoted at today's gas price, not what was actually paid.`;
+        node.textContent =
+          `· claim + remint ${fmtEth(q.total, 5, false)}${q.gasKnown ? "" : " + gas"}` +
+          `${usdPlain(q.total) ? ` (${usdPlain(q.total)})` : ""}` +
+          `${per ? ` · ${per} mint and reopen cost included` : (due ? "" : " at today's gas")}`;
+      } else { node.title = ""; node.textContent = ""; }
+    }
+  })();
 }
 
 function posCard(p, now, solo) {
@@ -3600,6 +3731,81 @@ function pendingFuel(d) {
   };
 }
 
+/* Gas to OPEN mints, measured rather than simulated.
+
+   estimateGas needs a sender already holding enough ETH to cover the send, which a
+   looked-up wallet never is and a spent-down one often is not, so it answered
+   "could not estimate" far more often than it answered. This reads what real batch
+   mints actually burned instead: no wallet, no balance, no simulation.
+
+   A batch is not linear in its count -- on chain a 1-mint transaction burned
+   282,371 gas and a 5-mint one 1,148,017, so roughly 66k of fixed overhead sits on
+   top of ~216k per mint. Dividing one receipt by its count would carry that
+   overhead into every mint and overstate a large holding badly, so both terms are
+   fitted from two batch sizes and the holding is costed as the transactions it
+   would actually take. */
+let OPEN_GAS = null;                 // { fixed, perMint }, in gas units
+let OPEN_GAS_JOB = null;
+
+async function learnOpenGas() {
+  const opened = I.batch.getEvent("BatchRankClaimed");
+  if (!opened) return null;
+  const head = await rpcRetry(p => p.getBlockNumber());
+
+  let logs = [];
+  for (const span of [60000, 600000, head + 1]) {
+    const res = await scanLogs(Math.max(0, head - span + 1), head, [A.batchMinter], [[opened.topicHash]]);
+    logs = (res && res.logs) || [];
+    if (logs.length) break;
+  }
+  if (!logs.length) return null;
+
+  // one receipt per distinct batch size, newest first, a handful at most
+  const bySize = new Map();
+  for (const lg of logs.slice(-400).reverse()) {
+    try {
+      const n = Number(I.batch.parseLog(lg).args[2]);
+      if (n > 0 && !bySize.has(n)) bySize.set(n, lg.transactionHash);
+    } catch (_) {}
+    if (bySize.size >= 6) break;
+  }
+  if (!bySize.size) return null;
+
+  const sizes = [...bySize.keys()].sort((a, b) => a - b);
+  const pick = sizes.length > 1 ? [sizes[0], sizes[sizes.length - 1]] : [sizes[0]];
+  const used = [];
+  for (const n of pick) {
+    const rc = await rpcRetry(p => p.getTransactionReceipt(bySize.get(n)));
+    if (rc && rc.gasUsed != null) used.push({ n: BigInt(n), gas: BigInt(rc.gasUsed) });
+  }
+  if (!used.length) return null;
+
+  if (used.length >= 2 && used[1].n > used[0].n) {
+    const [lo, hi] = used;
+    const perMint = (hi.gas - lo.gas) / (hi.n - lo.n);
+    const fixed = lo.gas - perMint * lo.n;
+    // a nonsense fit (one outlier receipt) falls back to the plain division
+    if (perMint > 0n && fixed >= 0n) return { fixed, perMint };
+  }
+  const only = used[used.length - 1];
+  return { fixed: 0n, perMint: only.gas / only.n };
+}
+
+async function openGasWei(count, gp) {
+  if (!count || !gp) return null;
+  if (OPEN_GAS == null) {
+    // one read per session, shared by every caller that asks while it is in flight
+    if (!OPEN_GAS_JOB) OPEN_GAS_JOB = learnOpenGas().catch(() => null);
+    OPEN_GAS = await OPEN_GAS_JOB;
+    if (OPEN_GAS == null) OPEN_GAS_JOB = null;   // let a later render try again
+  }
+  if (OPEN_GAS == null) return null;
+  // the fixed part is paid once per transaction, and a transaction caps at MAX_BATCH
+  const per = BigInt(Math.max(1, Number(S.K.MAX_BATCH ?? 100n)));
+  const txs = (BigInt(count) + per - 1n) / per;
+  return (OPEN_GAS.fixed * txs + OPEN_GAS.perMint * BigInt(count)) * gp;
+}
+
 async function renderWalletStats(sel, d) {
   const host = $(sel);
   if (!host) return;
@@ -3608,29 +3814,50 @@ async function renderWalletStats(sel, d) {
   const batches = groupBatches(d.positions);
   const { all, known, pending, positionCount } = pendingFuel(d);
 
+  const id = sel.slice(1);
   host.innerHTML = `<div class="grid2">
     <div>${statRow("Active positions", positionCount.toLocaleString())}
          ${statRow("FUEL pending", known.length ? fmtTok(pending, S.K.decimals, S.K.symbol) : "—")}
-         ${statRow("Estimated cost", `<span id="${sel.slice(1)}-cost">reading…</span>`, true)}</div>
+         ${statRow("Estimated cost", `<span id="${id}-cost">reading…</span>`, true)}</div>
     <div>${statRow("Total mints held", all.length.toLocaleString())}
-         ${statRow("Value at today's price", `<span id="${sel.slice(1)}-val">reading…</span>`, true)}
-         ${statRow("Potential return", `<span id="${sel.slice(1)}-roi">—</span>`, true)}</div>
+         ${statRow("Value at today's price", `<span id="${id}-val">reading…</span>`, true)}
+         ${statRow("Cost per " + S.K.symbol + " to open", `<span id="${id}-per">reading…</span>`, true)}
+         ${statRow("Potential return", `<span id="${id}-roi">—</span>`, true)}</div>
   </div>
-  <div class="derived">Cost is what these mints would cost to open at the current gas price, not what was actually paid — the fee tracks gas, so it has moved since. Value uses the current price in the FUEL pair.</div>`;
+  <div class="derived" id="${id}-note">Cost is what these mints would cost to open at the current gas price — the protocol's fee plus the network gas, measured from what real batch mints burn on chain — not what was actually paid; the fee tracks gas, so it has moved since. Value uses the current price in the FUEL pair.</div>`;
 
-  const costNode = $(`#${sel.slice(1)}-cost`), valNode = $(`#${sel.slice(1)}-val`), roiNode = $(`#${sel.slice(1)}-roi`);
+  const costNode = $(`#${id}-cost`), valNode = $(`#${id}-val`), roiNode = $(`#${id}-roi`);
+  const perNode = $(`#${id}-per`), noteNode = $(`#${id}-note`);
 
-  let cost = null;
+  let fees = null, gas = null;
   try {
     const gp = S.gasPrice || (await liveGas());
     if (gp) {
       const calls = batches.map(b => ({ to: A.batchMinter, iface: I.batch, fn: "batchFee", args: [BigInt(b.count), gp] }));
       if (d.soloMint) calls.push({ to: A.token, iface: I.token, fn: "mintFee", args: [gp] });
       const res = calls.length ? await mc(calls) : [];
-      if (res.length && res.every(v => v != null)) cost = res.reduce((a, v) => a + v, 0n);
+      if (res.length && res.every(v => v != null)) fees = res.reduce((a, v) => a + v, 0n);
+      gas = await openGasWei(all.length, gp).catch(() => null);
     }
   } catch (_) {}
-  if (costNode) costNode.textContent = cost != null ? fmtEth(cost) : "unavailable";
+
+  // the total is fees plus gas; when gas could not be estimated it says so rather
+  // than quietly reporting the fees alone as the cost
+  const cost = fees == null ? null : fees + (gas ?? 0n);
+  if (costNode) costNode.innerHTML = cost != null
+    ? fmtEth(cost) + (gas == null ? ` <span class="addr">(fees only)</span>` : "")
+    : "unavailable";
+  if (noteNode && gas == null) {
+    noteNode.innerHTML += " Network gas could not be read from a recent mint transaction, so the total is fees only.";
+  }
+
+  // the dollar cost of each FUEL these mints will pay out, gas and all
+  if (perNode) {
+    const per = costPerFuelLabel(cost, pending);
+    perNode.innerHTML = per
+      ? per + (gas == null ? ` <span class="addr">(fees only)</span>` : "")
+      : `<span class="addr">no price available</span>`;
+  }
 
   let valueWei = null;
   try {
