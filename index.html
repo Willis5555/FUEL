@@ -692,6 +692,12 @@ function chainNow() { return Math.floor((Date.now() + S.skewMs) / 1000); }
 // getGrossReward returns whole tokens, so projections need scaling into base units
 function unit() { return 10n ** BigInt(S.K.decimals ?? 18); }
 
+/* getGrossReward divides its eaa argument by 1000, and the contract feeds it
+   (1_000 + eaaRate) rather than the bare rate -- so a stored rate of 100 means a
+   1.1x bonus, not 0.1x. Passing the rate unwrapped understates every projection
+   elevenfold. */
+function eaaArg(rate) { return 1000n + BigInt(rate ?? 0); }
+
 /* The term constants are held in seconds, but claimRank/stake take days. Detect
    rather than assume: a protocol whose terms cap in the hundreds of days cannot
    be storing a four-digit day count, so anything that large is seconds.
@@ -1418,7 +1424,8 @@ async function fetchMintsFor(u, barSel) {
       let delta = gRank > p.rank ? gRank - p.rank : 2n;
       if (delta < 2n) delta = 2n;
       p.rankDelta = delta;
-      return { to: A.token, iface: I.token, fn: "getGrossReward", args: [delta, p.amplifier, p.term, p.eaaRate] };
+      return { to: A.token, iface: I.token, fn: "getGrossReward",
+               args: [delta, p.amplifier, p.term, eaaArg(p.eaaRate)] };
     });
     const gross = await chunked(gcalls, phase(3, 66));
     all.forEach((p, i) => p.gross = gross[i] == null ? null : gross[i] * unit());
@@ -1581,7 +1588,6 @@ function headlineFigures() {
     pooled,
     price,
     rank: L.globalRank != null ? Number(L.globalRank).toLocaleString() : "—",
-    open: L.activeMinters != null ? Number(L.activeMinters).toLocaleString() : "—",
     supply: L.totalSupply != null ? fmtTok(L.totalSupply, K.decimals, "").trim() : "—"
   };
 }
@@ -1608,7 +1614,6 @@ function renderHeroStats() {
     statRow("ETH held across the contracts", fmtEth(f.pooled)) +
     statRow("Price", f.price, true) +
     statRow("Global rank", f.rank, true) +
-    statRow("Mints open protocol-wide", f.open, true) +
     statRow(lenDays ? `${lenDays.toLocaleString()}-day pump fund` : "Pump fund cycle", clock, true);
 }
 
@@ -1623,7 +1628,6 @@ function renderProtocolStats() {
   const startCeiling = asDays(K.MAX_TERM_START, "max");
   host.innerHTML =
     bigStat("Global rank", f.rank, "one step per mint opened") +
-    bigStat("Price", f.price, `per ${K.symbol}`) +
     bigStat("Total supply", f.supply, `${K.symbol} in existence`) +
     // the tile's headline stays the bare number; its dollar value rides in the caption
     bigStat("Pooled ETH", fmtEth(f.pooled, 5, false).replace(" ETH", ""),
@@ -1632,8 +1636,7 @@ function renderProtocolStats() {
       startCeiling && maxT > startCeiling ? `up from ${startCeiling} at launch` : "grows with participation") +
     bigStat("Reward amplifier", amp != null ? amp.toLocaleString() : "—",
       ampFloor != null && amp != null && amp <= ampFloor ? "at its floor" : "drops 1 per day") +
-    bigStat("Early adopter bonus", eaaBonusLabel(), "decays as more people mint") +
-    bigStat("Open mints", f.open, "across every wallet");
+    bigStat("Early adopter bonus", eaaBonusLabel(), "decays as more people mint");
 
   const d = $("#protoDetail");
   if (!d) return;
@@ -1748,8 +1751,10 @@ async function quoteMint() {
   if (!gp) { $("#qFee").textContent = "—"; return; }
   const r = await mc([
     { to: A.batchMinter, iface: I.batch, fn: "batchFee", args: [count, gp] },
-    { to: A.token, iface: I.token, fn: "getGrossReward", args: [2n, S.L.amp ?? 0n, term, S.L.eaar ?? 0n] },
-    { to: A.token, iface: I.token, fn: "getGrossReward", args: [S.L.globalRank > 2n ? S.L.globalRank : 2n, S.L.amp ?? 0n, term, S.L.eaar ?? 0n] }
+    { to: A.token, iface: I.token, fn: "getGrossReward",
+      args: [2n, S.L.amp ?? 0n, term, eaaArg(S.L.eaar)] },
+    { to: A.token, iface: I.token, fn: "getGrossReward",
+      args: [S.L.globalRank > 2n ? S.L.globalRank : 2n, S.L.amp ?? 0n, term, eaaArg(S.L.eaar)] }
   ]);
   const fee = r[0], floor = r[1], ref = r[2];
   $("#qFee").textContent = fee != null ? fmtEth(fee) : "unavailable";
@@ -3336,7 +3341,12 @@ const TOP_BARS = ["#topBar", "#inflBar"];
 function topProgress(pct) { for (const sel of TOP_BARS) renderProgress($(sel), pct); }
 function topHideProgress() { for (const sel of TOP_BARS) hideProgress($(sel)); }
 
-function inflationSchedule() {
+/* Which slice of the schedule the chart covers. "all" runs to the last maturity;
+   "24h" keeps the next day only, bucketed by the hour, which is the resolution the
+   daily view cannot show. */
+const INFL = { range: "all" };
+
+function inflationSchedule(range) {
   const rows = TOP.rows;
   if (!rows || !rows.length || S.L.totalSupply == null) return null;
 
@@ -3357,6 +3367,32 @@ function inflationSchedule() {
   const DAY = 86400;
   const last = mints.reduce((a, m) => Math.max(a, m.ts), 0);
   if (last <= now) return { allDue: true, due: mints.reduce((a, m) => a + m.v, 0n), count: mints.length };
+
+  if (range === "24h") {
+    /* Half-hour buckets over one day. Anything maturing later is counted but not
+       drawn, so the note can say how much the window leaves out rather than implying
+       the schedule ends here. */
+    const step = 1800, count = 48;
+    const horizon = now + count * step;
+    const add = new Array(count + 1).fill(0n);
+    let overdue = 0n, overdueCount = 0, beyond = 0n, beyondCount = 0, inWindow = 0;
+    for (const m of mints) {
+      if (m.ts <= now) { overdue += m.v; overdueCount++; add[1] += m.v; inWindow++; continue; }
+      if (m.ts > horizon) { beyond += m.v; beyondCount++; continue; }
+      add[Math.ceil((m.ts - now) / step)] += m.v;
+      inWindow++;
+    }
+    const pts = [];
+    let run = S.L.totalSupply;
+    for (let i = 0; i <= count; i++) {
+      run += add[i];
+      pts.push({ t: now + i * step, v: run });
+    }
+    const bars = add.map((v, i) => ({ t: now + i * step, v }));
+    return { pts, bars, hourly: true, stepDays: 0, spanDays: 1,
+             overdue, overdueCount, beyond, beyondCount,
+             mints: inWindow, end: run, arriving: run - S.L.totalSupply };
+  }
 
   /* One bucket per day. The columns get thin over a long span, but widening the
      bucket hides the shape of the schedule -- a single day's cliff spread over
@@ -3417,11 +3453,19 @@ function renderInflation() {
   }
 
   host.dataset.state = "idle";
+  const picker = TOP.rows
+    ? `<select id="inflRange" class="fixed" style="width:150px" title="Window"
+               aria-label="How much of the schedule to draw">
+         <option value="all"${INFL.range === "all" ? " selected" : ""}>Full schedule</option>
+         <option value="24h"${INFL.range === "24h" ? " selected" : ""}>Next 24 hours</option>
+       </select>`
+    : "";
   const shell = (noteHtml, label, tail) =>
     `<div class="panel">
       <h3>${TITLE}</h3>
       <div class="row" style="align-items:flex-start">
         <p class="note" style="flex:1;margin:0">${noteHtml}</p>
+        ${picker}
         <button class="btn sm fixed" id="btnInflLoad">${label}</button>
       </div>
       <div id="inflBar" class="progress" hidden></div>
@@ -3437,7 +3481,7 @@ function renderInflation() {
     return;
   }
 
-  const sch = inflationSchedule();
+  const sch = inflationSchedule(INFL.range);
   if (!sch) { host.innerHTML = shell("No open mints found, so nothing is owed yet.", "Reload"); return; }
   if (sch.allDue) {
     host.innerHTML = shell(
@@ -3477,25 +3521,41 @@ function renderInflation() {
 
   /* The columns are the increments the line accumulates -- same buckets, same
      values, read either as "how much arrives" or "where supply gets to". */
-  const stepWord = sch.stepDays === 1 ? "day" : sch.stepDays + "-day step";
+  const stepWord = sch.hourly ? "30 minutes" : sch.stepDays === 1 ? "day" : sch.stepDays + "-day step";
   const barPts = sch.bars.map(b => ({ t: b.t, v: tok(b.v), usd: fuelUsdPlain(b.v) }));
   const peak = sch.bars.reduce((a, b) => (b.v > a.v ? b : a));
   const barOpts = { fmt: compact, fmtFull: exact, color: "#b2e5ba", unit: S.K.symbol,
-                    label: `${S.K.symbol} minted per ${stepWord}`, hourly: false, height: 250 };
+                    label: `${S.K.symbol} minted per ${stepWord}`, hourly: !!sch.hourly, height: 250 };
+  if (sch.hourly) opts.hourly = true;
+
+  const beyondTxt = sch.beyondCount
+    ? ` A further ${fmtTok(sch.beyond, dec, S.K.symbol)} across
+        ${sch.beyondCount.toLocaleString()} mint${sch.beyondCount === 1 ? "" : "s"} matures after
+        this window \u2014 switch to the full schedule to see it.`
+    : " Nothing else is scheduled beyond this window.";
+
+  const lead = sch.hourly
+    ? `The next 24 hours in half-hour steps. Today's supply plus
+       <strong>${fmtTok(sch.arriving, dec, S.K.symbol)}</strong> arriving from
+       ${sch.mints.toLocaleString()} mint${sch.mints === 1 ? "" : "s"} maturing inside it,
+       reaching <strong>${fmtTok(sch.end, dec, S.K.symbol)}</strong>${multTxt}.${overdueTxt}${beyondTxt}${partialTxt}`
+    : `Supply as it stands today, plus every mint still open added on the day it matures.
+       It ends at <strong>${fmtTok(sch.end, dec, S.K.symbol)}</strong>${multTxt}, across
+       ${sch.mints.toLocaleString()} open mint${sch.mints === 1 ? "" : "s"} over the next
+       ${sch.spanDays.toLocaleString()} day${sch.spanDays === 1 ? "" : "s"}${stepTxt}.${overdueTxt}
+       This is only what is <em>already</em> committed \u2014 mints opened from today on add to
+       it, so read the line as a floor rather than a forecast.${partialTxt}`;
 
   host.innerHTML = shell(
-    `Supply as it stands today, plus every mint still open added on the day it matures.
-     It ends at <strong>${fmtTok(sch.end, dec, S.K.symbol)}</strong>${multTxt}, across
-     ${sch.mints.toLocaleString()} open mint${sch.mints === 1 ? "" : "s"} over the next
-     ${sch.spanDays.toLocaleString()} day${sch.spanDays === 1 ? "" : "s"}${stepTxt}.${overdueTxt}
-     This is only what is <em>already</em> committed \u2014 mints opened from today on add to
-     it, so read the line as a floor rather than a forecast.${partialTxt}`,
+    lead,
     "Reload",
     svgLine(pts, opts) +
     `<h3 style="margin:26px 0 10px">${S.K.symbol} minted per ${stepWord}</h3>
      <p class="note">What each ${stepWord} actually brings, rather than where the running total
        gets to \u2014 these columns are the steps the line above adds up. The heaviest is
-       <strong>${fmtTok(peak.v, dec, S.K.symbol)}</strong> on ${fmtDate(peak.t)}.</p>` +
+       <strong>${fmtTok(peak.v, dec, S.K.symbol)}</strong> ${sch.hourly
+         ? "in the half hour to " + new Date(peak.t * 1000).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+         : "on " + fmtDate(peak.t)}.</p>` +
     svgBars(barPts, barOpts));
 }
 
@@ -4125,6 +4185,13 @@ try {
   on("#topSort", "change", e => { TOP.sort = e.target.value; renderTopHolders(); });
   on("#inflationHost", "click", e => {
     if (e.target.closest("#btnInflLoad")) restartTopHolders();
+  });
+  // the window only changes what is drawn, so it redraws from the scan already held
+  on("#inflationHost", "change", e => {
+    const sel = e.target.closest("#inflRange");
+    if (!sel) return;
+    INFL.range = sel.value === "24h" ? "24h" : "all";
+    renderInflation();
   });
   on("#statsRange", "change", () => {
     // changing the window invalidates what is drawn, but does not start a new scan
