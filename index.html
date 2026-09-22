@@ -304,6 +304,18 @@ input[type=range]{width:100%;accent-color:var(--accent-dim)}
 
 /* A disabled button gets no pointer events of its own, so the hover target has to
    be the wrapper around it. */
+/* the burner rows carry each protocol's own mark, at a size that lines up with the
+   text rather than dominating it */
+.burnmark{height:26px;width:26px;object-fit:contain;flex:0 0 26px;display:block}
+.burnmark-none{border:1px dashed var(--line);opacity:.5}
+.tglink{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:22px;height:22px;margin-left:6px;vertical-align:-5px;
+  color:var(--accent);border:1px solid var(--line);
+  text-decoration:none;
+}
+.tglink:hover{color:var(--green);border-color:var(--green);background:#ffffff0d}
+
 .soonwrap{position:relative;display:inline-block}
 .soonwrap button:disabled{opacity:.45;cursor:not-allowed}
 .soontip{
@@ -537,9 +549,28 @@ header.top .mark .txt{color:var(--neon);text-shadow:0 0 14px rgba(57,255,20,.45)
     <div id="inflationHost"></div>
 
     <div class="panel">
+      <h3>Top burners</h3>
+      <div class="row" style="align-items:flex-start">
+        <p class="note" style="flex:1">Which contracts have destroyed the most $FUEL. Read from
+          the token's own transfers to the dead address and to zero, then attributed to the
+          contract each transaction called &mdash; not to the wallet that held the tokens, which
+          for a PAMP entry is the entrant. Staking also burns, and is left out: those tokens come
+          back.</p>
+        <button class="btn sm fixed" id="btnBurnLoad">Load burners</button>
+      </div>
+      <div id="burnBar" class="progress" hidden></div>
+      <div id="burnMsg" class="derived">Not loaded. This reads every burn transfer and then one
+        receipt per transaction, so it only runs when you ask.</div>
+      <div id="burnList"></div>
+    </div>
+
+    <div class="panel">
       <h3>Top Minters</h3>
       <div class="row" style="align-items:flex-start">
         <p class="note" style="flex:1">Every wallet holding open mints, ranked by what those mints would pay out. Figures are the same ones the positions tab shows — read per wallet, not estimated. Cost is the fee actually paid to open the mints still held, taken from the mint events, not a re-quote at today's gas; a star marks a wallet whose mints are not all covered by one. This reads a great deal of chain state, so it only runs when you ask.</p>
+        <label class="fixed" style="flex:none;color:var(--muted);font-size:13px;white-space:nowrap">
+          <input type="checkbox" id="topOnlyClaimable" style="width:auto"> Only claimable
+        </label>
         <select id="topSort" class="fixed" style="width:186px" title="Sort by" aria-label="Sort the list by">
           <option value="pending" selected>Most FUEL pending</option>
           <option value="mints">Most mints</option>
@@ -3707,6 +3738,207 @@ function renderInflation() {
     overduePanel(sch, dec));
 }
 
+/* ---- who has burned $FUEL ----
+   Two sinks count as destruction: the dead address, and zero. Staking burns to zero
+   as well and is not destruction -- those tokens are minted back on withdraw -- so any
+   transaction carrying a Staked event is skipped. Attribution is the contract the
+   transaction called: the holder is whoever happened to own the tokens, which for a
+   PAMP entry is the entrant rather than the protocol. */
+const BURN = { busy: false, rows: null, total: 0n, txs: 0, abort: false };
+/* A burner worth less than this is noise -- a test call, a rounding sweep -- and
+   crowds out the ones that matter. Dropped from the list, not from the totals. */
+const BURN_MIN_USD = 1;
+function burnUsd(v) {
+  const p = fuelUsdPrice();
+  if (p == null || v == null) return null;          // no price: cannot judge, so keep it
+  return Number(E.formatUnits(v, S.K.decimals ?? 18)) * p;
+}
+const BURN_SINKS = {
+  "0x000000000000000000000000000000000000dead": "dead address",
+  "0x0000000000000000000000000000000000000000": "zero"
+};
+const BURN_NAMES = {
+  "0x1f8e137117f78ef1ea84235f3e5423c46bf2d4a2": { name: "FUEL buy and burn", mark: "fuel" },
+  "0x140cd99bc94ab43c735f7839457890c957710483": { name: "PAMP daily auction", mark: "pamp" },
+  "0xdbcf2c49ad36a20d28a9e2e44e243d7cc23583ba": { name: "FuelBurner", mark: "fuel" },
+  "0xeab771db3883dc05dbea1915f7e81910869bbc18": { name: "BatchMinter", mark: "fuel" },
+  "0x2f69ff61802d9738e562e438d1f6326389d95861": { name: "FeeDistributor", mark: "fuel" }
+};
+const BURN_TG = { fuel: "https://t.me/buymoretoken", pamp: "https://t.me/PAMPMORE" };
+
+/* Both marks are already on the page, so they are read from the DOM rather than
+   pasted in again -- a second copy of the base64 would cost more than the panel. */
+function burnMarkSrc(kind) {
+  const n = kind === "pamp"
+    ? document.querySelector('a[href*="willis5555.github.io/PAMP"] img')
+    : document.querySelector(".mark img");
+  return n && n.src ? n.src : null;
+}
+
+/* Telegram's glyph, inline so the row needs no network fetch. */
+const TG_SVG = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">' +
+  '<path fill="currentColor" d="M9.78 15.6l-.33 4.6c.47 0 .68-.2.93-.45l2.23-2.1 4.62 3.35c.85.47 1.45.22 1.67-.78l3.03-14.2c.27-1.24-.45-1.73-1.27-1.42L1.5 9.9c-1.22.47-1.2 1.15-.2 1.45l4.7 1.47 10.9-6.85c.5-.34.97-.15.59.19z"/></svg>';
+function burnSay(m) { const n = $("#burnMsg"); if (n) n.textContent = m; }
+function burnProgress(p) {
+  const b = $("#burnBar");
+  if (!b) return;
+  b.hidden = false;
+  b.style.setProperty("--p", Math.max(0, Math.min(100, p)) + "%");
+  b.dataset.pct = String(Math.round(p));
+}
+
+async function loadBurners() {
+  if (BURN.busy) return;
+  BURN.busy = true; BURN.abort = false;
+  paintScanButtons();
+  const topic = I.token.getEvent("Transfer").topicHash;
+  const pad = a => "0x" + a.toLowerCase().replace(/^0x/, "").padStart(64, "0");
+  try {
+    burnSay("Reading burn transfers\u2026");
+    burnProgress(2);
+    const head = await rpcRetry(p => p.getBlockNumber());
+
+    /* The node caps a log query, so a window that is refused is split rather than
+       skipped -- a partial scan would understate a burner. */
+    const pull = async (from, to, sink) => {
+      try {
+        return await rpcRetry(p => p.getLogs({
+          address: A.token, topics: [topic, null, pad(sink)], fromBlock: from, toBlock: to }));
+      } catch (e) {
+        if (to - from < 2 || !/exceed|limit|too many|range/i.test(String(e && e.message))) throw e;
+        const mid = Math.floor((from + to) / 2);
+        return (await pull(from, mid, sink)).concat(await pull(mid + 1, to, sink));
+      }
+    };
+    let logs = [];
+    for (const sink of Object.keys(BURN_SINKS)) logs = logs.concat(await pull(0, head, sink));
+    if (!logs.length) {
+      BURN.rows = []; BURN.total = 0n; BURN.txs = 0;
+      burnSay("No $FUEL has been burned yet.");
+      renderBurners(); return;
+    }
+
+    /* One receipt per transaction gives both the contract that was called and the
+       events, so the Staked check costs nothing extra. */
+    const byTx = new Map();
+    for (const l of logs) {
+      const k = l.transactionHash;
+      if (!byTx.has(k)) byTx.set(k, []);
+      byTx.get(k).push(l);
+    }
+    const hashes = [...byTx.keys()];
+    const stakedTopic = I.token.getEvent("Staked").topicHash;
+    const by = new Map();
+    let done = 0, skipped = 0, skippedV = 0n;
+    const LANES = 5;
+    let next = 0;
+    await Promise.all(Array.from({ length: LANES }, async () => {
+      while (next < hashes.length && !BURN.abort) {
+        const h = hashes[next++];
+        let rec = null;
+        try { rec = await rpcRetry(p => p.getTransactionReceipt(h)); } catch (_) {}
+        done++;
+        if (done % 5 === 0 || done === hashes.length) {
+          burnProgress(6 + (done / hashes.length) * 92);
+          burnSay(`Reading transactions\u2026 ${done} of ${hashes.length}`);
+        }
+        if (!rec) continue;
+        const staked = (rec.logs || []).some(lg =>
+          String(lg.address).toLowerCase() === A.token.toLowerCase() && lg.topics[0] === stakedTopic);
+        const amount = byTx.get(h).reduce((a, l) => a + BigInt(l.data), 0n);
+        if (staked) { skipped++; skippedV += amount; continue; }
+        const target = rec.to ? E.getAddress(rec.to) : "(contract creation)";
+        const e = by.get(target) || { addr: target, v: 0n, n: 0 };
+        e.v += amount; e.n++;
+        by.set(target, e);
+      }
+    }));
+
+    BURN.rows = [...by.values()].sort((a, b) => (b.v > a.v ? 1 : b.v < a.v ? -1 : 0));
+    BURN.total = BURN.rows.reduce((a, r) => a + r.v, 0n);
+    BURN.txs = hashes.length;
+    BURN.skipped = skipped; BURN.skippedV = skippedV;
+    burnSay("");
+    renderBurners();
+  } catch (e) {
+    burnSay("Could not read the burns: " + explain(e));
+  } finally {
+    BURN.busy = false;
+    const b = $("#burnBar"); if (b) b.hidden = true;
+    paintScanButtons();
+  }
+}
+
+function renderBurners() {
+  const host = $("#burnList");
+  if (!host) return;
+  const rows = BURN.rows;
+  host.innerHTML = "";
+  if (!rows) return;
+  if (!rows.length) { host.innerHTML = `<div class="empty">Nothing has been burned yet.</div>`; return; }
+
+  const dec = S.K.decimals ?? 18;
+  const supply = S.L.totalSupply;
+
+  const keep = [], dust = [];
+  for (const r of rows) {
+    const u = burnUsd(r.v);
+    (u != null && u < BURN_MIN_USD ? dust : keep).push(r);
+  }
+  if (!keep.length) {
+    host.innerHTML = `<div class="empty">Every burner is worth under $${BURN_MIN_USD}.</div>`;
+    return;
+  }
+  const dustV = dust.reduce((a, r) => a + r.v, 0n);
+  const dustTx = dust.reduce((a, r) => a + r.n, 0);
+
+  keep.forEach((r, i) => {
+    const key = r.addr.toLowerCase();
+    const info = BURN_NAMES[key] || null;
+    const name = info ? info.name : "";
+    const src = info ? burnMarkSrc(info.mark) : null;
+    const logo = src
+      ? `<img class="burnmark" src="${src}" alt="">`
+      : `<span class="burnmark burnmark-none" aria-hidden="true"></span>`;
+    const tg = info && BURN_TG[info.mark]
+      ? `<a class="tglink" href="${BURN_TG[info.mark]}" target="_blank" rel="noopener"
+            title="${name} on Telegram" aria-label="${name} on Telegram">${TG_SVG}</a>`
+      : "";
+    const share = BURN.total > 0n ? Number(r.v * 10000n / BURN.total) / 100 : 0;
+    const ofSupply = (supply && supply > 0n) ? Number(r.v * 10000n / supply) / 100 : null;
+    const box = el("div", "run");
+    box.innerHTML =
+      `<div class="row" style="align-items:center">
+         ${logo}
+         <span style="flex:1;min-width:0"><strong>${i + 1}. ${name || "unlabelled contract"}</strong>
+           ${tg}
+           <span class="addr">${link(r.addr)}</span></span>
+         <strong>${fmtTok(r.v, dec, S.K.symbol)}</strong>
+       </div>
+       <div class="derived">${share.toFixed(share < 0.01 ? 4 : 2)}% of all burns ·
+         ${r.n.toLocaleString()} transaction${r.n === 1 ? "" : "s"}` +
+      (ofSupply != null ? ` · ${ofSupply.toFixed(ofSupply < 0.01 ? 4 : 2)}% of today's supply` : "") +
+      `</div>`;
+    host.appendChild(box);
+  });
+
+  const foot = [];
+  foot.push(`${fmtTok(BURN.total, dec, S.K.symbol)} burned across ` +
+    `${BURN.txs.toLocaleString()} transaction${BURN.txs === 1 ? "" : "s"} by ` +
+    `${rows.length.toLocaleString()} contract${rows.length === 1 ? "" : "s"}.`);
+  if (dust.length) {
+    foot.push(`${dust.length.toLocaleString()} contract${dust.length === 1 ? "" : "s"} under ` +
+      `$${BURN_MIN_USD} hidden (${fmtTok(dustV, dec, S.K.symbol)} across ` +
+      `${dustTx.toLocaleString()} transaction${dustTx === 1 ? "" : "s"}), still counted above.`);
+  }
+  if (BURN.skipped) {
+    foot.push(`${BURN.skipped.toLocaleString()} staking transaction` +
+      `${BURN.skipped === 1 ? "" : "s"} (${fmtTok(BURN.skippedV, dec, S.K.symbol)}) left out ` +
+      "\u2014 staked tokens are minted back on withdraw, so they are not destroyed.");
+  }
+  host.appendChild(el("div", "derived", foot.join(" ")));
+}
+
 function renderTopHolders() {
   renderInflation();
   const host = $("#topList");
@@ -3719,7 +3951,17 @@ function renderTopHolders() {
   const now = chainNow();
   const mine = S.account ? S.account.toLowerCase() : null;
 
-  sortTopRows(rows).slice(0, TOP_SHOWN).forEach((r, i) => {
+  /* `overdue` is the count of that wallet's mints already past maturity, so it is
+     also the test for whether the wallet has anything to claim right now. */
+  const onlyClaimable = TOP.onlyClaimable;
+  const shownRows = onlyClaimable ? rows.filter(r => r.overdue > 0) : rows;
+  if (onlyClaimable && !shownRows.length) {
+    host.innerHTML = `<div class="empty">No wallet has a matured mint right now.
+      Untick the filter to see everyone.</div>`;
+    return;
+  }
+
+  sortTopRows(shownRows).slice(0, TOP_SHOWN).forEach((r, i) => {
     const open = openHolders.has(r.address);
     const isMine = mine && r.address.toLowerCase() === mine;
     const when = r.overdue
@@ -3770,10 +4012,20 @@ function renderTopHolders() {
     host.appendChild(box);
   });
 
-  if (rows.length > TOP_SHOWN) {
-    host.appendChild(el("div", "derived",
-      `Showing the top ${TOP_SHOWN} of ${rows.length.toLocaleString()} wallets holding open mints.`));
+  const hidden = rows.length - shownRows.length;
+  const parts = [];
+  if (shownRows.length > TOP_SHOWN) {
+    parts.push(`Showing the top ${TOP_SHOWN} of ${shownRows.length.toLocaleString()} ` +
+      (onlyClaimable ? "wallets with something claimable" : "wallets holding open mints") + ".");
+  } else if (onlyClaimable) {
+    parts.push(`${shownRows.length.toLocaleString()} wallet` +
+      `${shownRows.length === 1 ? " has" : "s have"} a matured mint.`);
   }
+  if (hidden > 0) {
+    parts.push(`${hidden.toLocaleString()} wallet${hidden === 1 ? "" : "s"} with nothing ` +
+      "matured " + (hidden === 1 ? "is" : "are") + " hidden by the filter.");
+  }
+  if (parts.length) host.appendChild(el("div", "derived", parts.join(" ")));
 }
 
 
@@ -4330,7 +4582,16 @@ try {
 
   on("#btnStatsRefresh", "click", restartStats);
   on("#btnTopLoad", "click", restartTopHolders);
+  on("#btnBurnLoad", "click", () => {
+    if (scanBusy()) { burnSay("Another scan is running. It finishes first, then press this."); return; }
+    loadBurners();
+  });
   on("#topSort", "change", e => { TOP.sort = e.target.value; renderTopHolders(); });
+  // a filter over rows already in hand, so it never restarts the scan
+  on("#topOnlyClaimable", "change", e => {
+    TOP.onlyClaimable = e.target.checked;
+    renderTopHolders();
+  });
   on("#inflationHost", "click", e => {
     if (e.target.closest("#btnInflLoad")) restartTopHolders();
   });
@@ -4385,7 +4646,7 @@ try {
    asked for first keeps the floor; the other declines rather than queueing, so nobody
    is left watching a bar that has not started. */
 function scanBusy() {
-  return STATS.busy ? "charts" : TOP.busy ? "minters" : null;
+  return STATS.busy ? "charts" : TOP.busy ? "minters" : BURN.busy ? "burners" : null;
 }
 function paintScanButtons() {
   const who = scanBusy();
@@ -4399,6 +4660,8 @@ function paintScanButtons() {
     "The Top Minters scan is running — it finishes first.");
   set("#btnTopLoad", who === "charts",
     "The history scan is running — it finishes first.");
+  set("#btnBurnLoad", who != null && who !== "burners",
+    "Another scan is running. It finishes first.");
   set("#btnInflLoad", who === "charts",
     "The history scan is running — it finishes first.");
 }
