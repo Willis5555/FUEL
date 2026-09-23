@@ -528,10 +528,12 @@ header.top .mark .txt{color:var(--neon);text-shadow:0 0 14px rgba(57,255,20,.45)
   <section class="tab" id="tab-liquidity">
     <div class="panel" id="lpPanel">
       <h3 class="lphead"><img class="lpmark" id="lpHeadMark" alt=""> PROVIDE LIQUIDITY</h3>
-      <p class="note">Opens a Uniswap v3 position in the <strong>1% WETH/FUEL pool</strong>
-        <span class="addr" id="lpPoolLink"></span> &mdash; the only pool this panel touches, and the
-        one the rest of the page prices from. A position earns only while the price is inside its
-        range, and is held as an NFT in your wallet rather than as a balance.</p>
+      <p class="note">Opens a <strong>one-sided</strong> Uniswap v3 position in the
+        <strong>1% WETH/FUEL pool</strong> <span class="addr" id="lpPoolLink"></span> &mdash; the only
+        pool this panel touches, and the one the rest of the page prices from. You put in one token,
+        not two: ETH sits below today's price and buys FUEL as it falls, FUEL sits above it and sells
+        as it rises. Until the price reaches your band nothing moves, and the position is held as an
+        NFT in your wallet rather than as a balance.</p>
 
       <div class="lpgrid">
         <div class="lpform">
@@ -549,7 +551,7 @@ header.top .mark .txt{color:var(--neon);text-shadow:0 0 14px rgba(57,255,20,.45)
           </div>
           <div class="lpquick" id="lpQuick"></div>
 
-          <label class="f">Which side you are adding</label>
+          <label class="f">Which token you are putting in</label>
           <div class="sidebtn" id="lpSide">
             <button class="btn sm on" data-lpside="eth"><span class="lpcoin">&#9670;</span> Add ETH</button>
             <button class="btn sm" data-lpside="fuel"><img class="lpmark sm" alt=""> Add FUEL</button>
@@ -3987,7 +3989,7 @@ function renderInflation() {
    the reciprocal: a LOWER price in ETH per FUEL is a HIGHER tick. That inversion is
    the easiest thing to get backwards, so the panel echoes the range back in the units
    it was typed in. */
-const LP = { spacing: 200, fee: 10000, busy: false, allowance: null, positions: null, side: "eth", ethBal: null };
+const LP = { spacing: 200, fee: 10000, busy: false, allowance: null, positions: null, side: "eth", ethBal: null, factor: 2 };
 
 /* Enough digits to be exact without turning the box into a wall of zeros. */
 function lpTrim(v, places) {
@@ -4005,18 +4007,12 @@ function setLpSide(side) {
   if (lab) lab.textContent = LP.side === "fuel"
     ? (S.K.symbol || "FUEL") + " to add" : "ETH to add";
   const inp = $("#lpEth");
-  if (inp && LP.side !== was) {
-    /* The toggle only changes which token you name, not the position: 1.25 ETH
-       becomes the FUEL that pairs with it at this range. Overwriting with a fixed
-       default instead made the quote jump for no reason the user asked for, which
-       looked like the toggle was doing nothing at all. */
-    const a = LP.calc;
-    const other = !a ? null : LP.side === "fuel" ? a.fuel : a.eth;
-    /* 12 places on the ETH side, not 18: a double cannot hold the last few anyway,
-       and rendering them turned 1.25 into 1.250000000000000666. */
-    inp.value = other != null && other > 0
-      ? lpTrim(other, LP.side === "fuel" ? 6 : 12)
-      : (LP.side === "fuel" ? "100000" : "0.01");
+  if (LP.side !== was) {
+    /* Each side sits on its own side of today's price, so switching flips the band
+       to mirror the old one at the same distance rather than leaving a range the new
+       token cannot fill. The amount is in the other token now, so it starts over. */
+    lpSetPresetRange(LP.factor || 2);
+    if (inp) inp.value = LP.side === "fuel" ? "100000" : "0.01";
   }
   const unit = $("#lpAmtUnit");
   if (unit) unit.textContent = LP.side === "fuel" ? (S.K.symbol || "FUEL") : "ETH";
@@ -4159,6 +4155,25 @@ function alignTick(t, up) {
   const r = up ? Math.ceil(t / LP.spacing) : Math.floor(t / LP.spacing);
   return r * LP.spacing;
 }
+/* Every position this panel opens holds one token, not two. A range that covers
+   today's price would take both, so a range that strays across it is pushed back to
+   the near side: below spot when you are adding ETH, above it when you are adding
+   FUEL. Ticks run opposite to price here (token0 is WETH), so "below spot in price"
+   is "above cur in ticks". */
+function lpClampSide(range, cur) {
+  if (!range || cur == null) return range;
+  const floor = alignTick(cur, false);          // the spacing boundary at or under cur
+  const ceil = floor + LP.spacing;              // the first one strictly past it
+  if (LP.side === "fuel") {
+    const upper = Math.min(range.upper, floor);
+    const lower = Math.min(range.lower, upper - LP.spacing);
+    return upper > lower ? { lower, upper } : null;
+  }
+  const lower = Math.max(range.lower, ceil);
+  const upper = Math.max(range.upper, lower + LP.spacing);
+  return upper > lower ? { lower, upper } : null;
+}
+
 function lpRange() {
   const a = Number(($("#lpLow") || {}).value), b = Number(($("#lpHigh") || {}).value);
   if (!(a > 0) || !(b > 0)) return null;
@@ -4166,7 +4181,22 @@ function lpRange() {
   if (t1 == null || t2 == null) return null;
   const lower = alignTick(Math.min(t1, t2), false);
   const upper = alignTick(Math.max(t1, t2), true);
-  return upper > lower ? { lower, upper } : null;
+  if (!(upper > lower)) return null;
+  return lpClampSide({ lower, upper }, lpCurrentTick());
+}
+
+/* The presets, and the side toggle, both want the same thing: a band that starts at
+   the first tick past today's price and reaches `f` times away from it, in whichever
+   direction the chosen token can be sold. */
+function lpSetPresetRange(f) {
+  const cur = lpCurrentTick();
+  const lo = $("#lpLow"), hi = $("#lpHigh");
+  if (cur == null || !lo || !hi) return;
+  LP.factor = f;
+  const spot = tickToPrice(cur);
+  const near = tickToPrice(LP.side === "fuel" ? alignTick(cur, false) : alignTick(cur, false) + LP.spacing);
+  if (LP.side === "fuel") { lo.value = plainPrice(near, 6); hi.value = plainPrice(spot * f, 6); }
+  else                    { lo.value = plainPrice(spot / f, 6); hi.value = plainPrice(near, 6); }
 }
 
 /* Standard v3 sizing: below the range it is all token0 (WETH), above it all token1
@@ -4245,18 +4275,13 @@ function renderLpQuick() {
   host.innerHTML = "";
   const cur = lpCurrentTick();
   if (cur == null) return;
-  /* Each label says exactly what it does: "50%" is half the price to half again,
-     and the rest are that many times down and up. The x presets have to multiply
-     rather than subtract — 50% below spot is a price, 50x below spot is not. */
-  for (const [label, lo, hi] of [["50%", 0.5, 1.5], ["2x", 0.5, 2], ["10x", 0.1, 10], ["50x", 0.02, 50]]) {
+  /* How far past today's price the band reaches. Each starts at the price now and
+     runs one way only: down for ETH, which fills as FUEL gets cheaper, up for FUEL,
+     which fills as it gets dearer. */
+  for (const [label, f] of [["50%", 1.5], ["2x", 2], ["10x", 10], ["50x", 50]]) {
     const b = el("button", "btn sm fixed", label);
     b.style.flex = "1";
-    b.onclick = () => {
-      const spot = tickToPrice(cur);
-      $("#lpLow").value = plainPrice(spot * lo, 6);
-      $("#lpHigh").value = plainPrice(spot * hi, 6);
-      renderLp();
-    };
+    b.onclick = () => { lpSetPresetRange(f); renderLp(); };
     host.appendChild(b);
   }
 }
@@ -4291,25 +4316,33 @@ function renderLp() {
   const apyNode = $("#lpApy");
   if (apyNode) {
     const r = lpApy(range, a);
+    /* A one-sided band is out of range by definition, so the honest headline is that
+       it earns nothing today, not a rate it is not being paid. */
     apyNode.textContent =
       LPFEE.perDay == null ? (LPFEE.busy ? "reading\u2026" : "\u2014")
       : !r ? "\u2014"
-      : !r.inRange ? "0% \u2014 the range does not cover today's price"
+      : !r.inRange ? "0% today"
       : (r.pct >= 1000 ? Math.round(r.pct).toLocaleString() : r.pct.toFixed(1)) + "%";
+    const apyKey = $(".lpapyk");
+    if (apyKey) apyKey.textContent = r && !r.inRange ? "Earns while filling" : "Estimated APY";
   }
 
   const lo = tickToPrice(range.upper), hi = tickToPrice(range.lower);
   const snapped = "Snapped to the pool's tick spacing: " +
     plainPrice(lo) + " \u2026 " + plainPrice(hi) + " ETH per FUEL. ";
   if (!a) { note.textContent = snapped; paintLpButton(); return; }
+  const sym = S.K.symbol || "FUEL";
   note.textContent = snapped + (
     a.where === "below"
-      ? "The whole range sits below today's price, so this is a standing offer to buy FUEL on " +
-        "the way down: it takes only ETH, and turns into FUEL if the price falls that far. It " +
-        "earns nothing until then."
+      ? "It takes only ETH. This is a standing offer to buy " + sym + " on the way down: the ETH " +
+        "converts to " + sym + ", a little at a time, as the price falls through the band, and is " +
+        "all " + sym + " once it clears the far edge. Nothing happens, and nothing is earned, " +
+        "while the price stays above it."
     : a.where === "above"
-      ? "The whole range sits above today's price, so it would take only FUEL, not ETH. Move the " +
-        "range around the current price."
+      ? "It takes only " + sym + ". This is a standing offer to sell on the way up: the " + sym +
+        " converts to ETH, a little at a time, as the price rises through the band, and is all ETH " +
+        "once it clears the far edge. Nothing happens, and nothing is earned, while the price " +
+        "stays below it."
       : "The range covers today's price, so it takes both tokens and starts earning fees at once.");
 
   if (LPFEE.perDay != null && LPFEE.days) {
@@ -5509,15 +5542,9 @@ function tick() {
     LP._primed = true;
     safe("liquidity panel", () => {
       renderLpQuick();
-      /* Opening on empty boxes makes every figure a dash and the panel look broken.
-         A sensible band around the live price gives it something to say. */
-      const cur = lpCurrentTick();
+      /* Opening on empty boxes makes every figure a dash and the panel look broken. */
       const lo = $("#lpLow"), hi = $("#lpHigh");
-      if (cur != null && lo && hi && !lo.value && !hi.value) {
-        const spot = tickToPrice(cur);
-        lo.value = plainPrice(spot * 0.75, 6);
-        hi.value = plainPrice(spot * 1.25, 6);
-      }
+      if (lo && hi && !lo.value && !hi.value) lpSetPresetRange(2);
       renderLp();
       renderLpPositions();
     });
