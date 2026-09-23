@@ -21,6 +21,7 @@
   --green:#b2e5ba;
   --amber:#e0b358;
   --heading:#eedc93;
+  --tab-on:#63e08a;            /* the selected tab: green, but calmer than the neon */
 
   /* aliases so component styles read plainly */
   --panel-2:#16201b;
@@ -133,7 +134,12 @@ nav.tabs button{
   transition:color 120ms ease,border-color 120ms ease;
 }
 nav.tabs button:hover{color:var(--text)}
-nav.tabs button[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent)}
+/* Neon, but only where it marks the place: lit text and a lit rule, no wash and no
+   halo. The tab bar sits above everything else on the page and should not compete
+   with it. */
+nav.tabs button[aria-selected="true"]{
+  color:var(--tab-on);border-bottom-color:var(--tab-on);
+}
 section.tab{display:none}
 section.tab.on{display:block}
 
@@ -306,6 +312,73 @@ input[type=range]{width:100%;accent-color:var(--accent-dim)}
    be the wrapper around it. */
 /* the burner rows carry each protocol's own mark, at a size that lines up with the
    text rather than dominating it */
+/* ---- provide liquidity ---------------------------------------------------
+   The form is two columns: what you choose on the left, what it costs on the
+   right, so the numbers sit beside the controls that change them rather than
+   a screen below. Inputs are capped: two small decimals do not need 1100px. */
+.lphead{display:flex;align-items:center;gap:10px}
+.lpmark{height:22px;width:22px;object-fit:contain;flex:0 0 22px;vertical-align:-5px}
+.lpmark.sm{height:16px;width:16px;flex:0 0 16px;vertical-align:-3px}
+.lpmark.xs{height:14px;width:14px;flex:0 0 14px;vertical-align:-2px;margin-right:6px}
+.lpcoin{color:var(--accent);font-size:13px;margin-right:4px}
+.lpcoin.xs{font-size:11px;margin-right:8px;width:14px;display:inline-block;text-align:center}
+.sidebtn .btn.on .lpcoin{color:inherit}
+
+.lpgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,380px);gap:26px;align-items:start}
+@media(max-width:900px){
+  .lpgrid{grid-template-columns:1fr;gap:18px}
+  /* Nine leading zeros do not fit a half-width box at 13px, and a price cut off
+     mid-number reads as a bug. */
+  .lprange input{font-size:12px;padding-left:8px;padding-right:8px}
+  .lpquick{gap:4px}
+  .lpquick .btn{padding:6px 2px;font-size:11px}
+}
+
+.lprange{display:flex;align-items:flex-end;gap:10px;max-width:560px}
+.lpfield{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.lpcap{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+.lpdash{color:var(--dim);padding-bottom:11px}
+.lprange input{width:100%}
+
+.lpquick{display:flex;gap:6px;margin-top:10px;max-width:560px}
+.lpquick .btn{
+  flex:1;padding:6px 4px;font-size:12px;
+  /* Same green as the selected tab, and the same restraint: coloured text and
+     border, no glow. These are shortcuts, not the main action. */
+  color:var(--tab-on);border-color:var(--tab-on);
+  transition:background .12s, color .12s;
+}
+.lpquick .btn:hover:not(:disabled){background:rgba(99,224,138,.12)}
+.lpquick .btn:active:not(:disabled){background:var(--tab-on);color:var(--bg)}
+.lpquick .btn:disabled{color:var(--dim);border-color:var(--line)}
+
+/* Every control in this column shares one width, so the presets, the two coin
+   buttons, the range boxes and the amount field all line up on both edges.
+   Scoped to #lpSide: .sidebtn is used by other toggles on the page. */
+#lpSide{max-width:560px}
+.lpamt{position:relative;max-width:560px}
+.lpamt input{width:100%;padding-right:66px}
+.lpunit{
+  position:absolute;right:12px;top:50%;transform:translateY(-50%);
+  font-family:var(--mono);font-size:12px;color:var(--dim);pointer-events:none;
+}
+
+.lpsum{border:1px solid var(--line);background:var(--bg);padding:16px}
+.lpapy{display:flex;align-items:baseline;justify-content:space-between;gap:12px;
+  padding-bottom:12px;margin-bottom:12px;border-bottom:1px solid var(--line)}
+.lpapyk{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim)}
+.lpapyv{font-size:24px;line-height:1.1;color:var(--green);text-align:right}
+.lpsum .quote{border-left:0;padding-left:0}
+.lpsum .line span{display:flex;align-items:center}
+
+.lpgo{width:100%;margin-top:14px}
+.lppos{margin-top:22px;border-top:1px solid var(--line);padding-top:16px}
+
+/* a two-way toggle, same shape as the buttons around it */
+.sidebtn{display:flex;gap:0}
+.sidebtn .btn{flex:1;border-radius:0}
+.sidebtn .btn.on{background:var(--accent);border-color:var(--accent);color:var(--bg)}
+
 .burnmark{height:26px;width:26px;object-fit:contain;flex:0 0 26px;display:block}
 .burnmark-none{border:1px dashed var(--line);opacity:.5}
 .tglink{
@@ -371,6 +444,7 @@ header.top .mark .txt{color:var(--neon);text-shadow:0 0 14px rgba(57,255,20,.45)
   <nav class="tabs" role="tablist">
     <button role="tab" aria-selected="true" data-tab="mint">Mint</button>
     <button role="tab" aria-selected="false" data-tab="positions">Positions</button>
+    <button role="tab" aria-selected="false" data-tab="liquidity">Liquidity</button>
     <button role="tab" aria-selected="false" data-tab="stake">Stake</button>
     <button role="tab" aria-selected="false" data-tab="burns">Burns &amp; fund</button>
     <button role="tab" aria-selected="false" data-tab="stats">Stats</button>
@@ -447,6 +521,81 @@ header.top .mark .txt{color:var(--neon);text-shadow:0 0 14px rgba(57,255,20,.45)
         <button class="btn fixed" id="btnLookup">Look up</button>
       </div>
       <div id="lookupResult"></div>
+    </div>
+  </section>
+
+  <!-- ============ LIQUIDITY ============ -->
+  <section class="tab" id="tab-liquidity">
+    <div class="panel" id="lpPanel">
+      <h3 class="lphead"><img class="lpmark" id="lpHeadMark" alt=""> PROVIDE LIQUIDITY</h3>
+      <p class="note">Opens a Uniswap v3 position in the <strong>1% WETH/FUEL pool</strong>
+        <span class="addr" id="lpPoolLink"></span> &mdash; the only pool this panel touches, and the
+        one the rest of the page prices from. A position earns only while the price is inside its
+        range, and is held as an NFT in your wallet rather than as a balance.</p>
+
+      <div class="lpgrid">
+        <div class="lpform">
+          <label class="f" for="lpLow" style="margin-top:0">Price range, in ETH per FUEL</label>
+          <div class="lprange">
+            <div class="lpfield">
+              <span class="lpcap">Min</span>
+              <input type="number" id="lpLow" step="any" min="0" inputmode="decimal">
+            </div>
+            <span class="lpdash">&rarr;</span>
+            <div class="lpfield">
+              <span class="lpcap">Max</span>
+              <input type="number" id="lpHigh" step="any" min="0" inputmode="decimal">
+            </div>
+          </div>
+          <div class="lpquick" id="lpQuick"></div>
+
+          <label class="f">Which side you are adding</label>
+          <div class="sidebtn" id="lpSide">
+            <button class="btn sm on" data-lpside="eth"><span class="lpcoin">&#9670;</span> Add ETH</button>
+            <button class="btn sm" data-lpside="fuel"><img class="lpmark sm" alt=""> Add FUEL</button>
+          </div>
+
+          <label class="f" for="lpEth" id="lpAmtLabel">ETH to add</label>
+          <div class="lpamt">
+            <input type="number" id="lpEth" min="0" step="any" value="0.01" inputmode="decimal">
+            <span class="lpunit" id="lpAmtUnit">ETH</span>
+          </div>
+          <div class="lpquick" id="lpPct"></div>
+          <div class="derived" id="lpBal" style="margin-top:8px"></div>
+        </div>
+
+        <div class="lpsum">
+          <div class="lpapy">
+            <span class="lpapyk">Estimated APY</span>
+            <span class="lpapyv" id="lpApy">&mdash;</span>
+          </div>
+          <div class="quote" style="margin:0">
+            <div class="line"><span>Price now</span><strong id="lpSpot">&mdash;</strong></div>
+            <div class="line"><span>Range vs spot</span><strong id="lpVsSpot">&mdash;</strong></div>
+            <div class="line"><span>Ticks</span><strong id="lpTicks">&mdash;</strong></div>
+            <div class="line"><span><span class="lpcoin xs">&#9670;</span>ETH needed</span><strong id="lpNeed0">&mdash;</strong></div>
+            <div class="line"><span><img class="lpmark xs" alt="">FUEL needed</span><strong id="lpNeed1">&mdash;</strong></div>
+          </div>
+          <div class="derived" id="lpNote">Set a range to see what it would take.</div>
+
+          <div id="lpApprove" style="display:none">
+            <div class="row" style="margin-top:10px;align-items:center">
+              <span class="addr" id="lpAllow" style="flex:1"></span>
+              <button class="btn sm fixed" id="btnLpApprove">Approve FUEL</button>
+            </div>
+          </div>
+
+          <button class="btn primary lpgo" id="btnLp">Connect wallet</button>
+        </div>
+      </div>
+
+      <div class="lppos">
+        <div class="row" style="align-items:baseline;margin:0 0 8px">
+          <h3 style="font-size:11px;margin:0;flex:1">Your positions</h3>
+          <button class="btn sm fixed" id="btnLpRefresh" title="Check again" aria-label="Check again">&#8635;</button>
+        </div>
+        <div id="lpList"></div>
+      </div>
     </div>
   </section>
 
@@ -644,6 +793,10 @@ const A = {
   moreBurner:  null,            // resolved on chain from feeDist.moreBurner()
   moreBurnerExpected: "0x86f11A15E1793e7ce1F4264830d1973e80339A51",
   pool:        "0xFF40c99525ffA6b6cf79ecbE370eF7C887D68F69",
+  weth:        "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73",
+  /* The position manager belonging to this pool's factory. The canonical Uniswap
+     address holds an unrelated 2KB stub on this chain and cannot be used. */
+  posManager:  "0x73991a25C818Bf1f1128dEAaB1492D45638DE0D3",
   multicall:   "0xcA11bde05977b3631167028862bE2a173976CA11"
 };
 
@@ -675,6 +828,8 @@ ABI.multicall = [
 ];
 
 ABI.pool = [
+  // the fee estimate reads volume from this; without it the scan finds nothing
+  "event Swap(address indexed sender, address indexed recipient, int256 amount0, int256 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick)",
   "function slot0() view returns (uint160 sqrtPriceX96, int24 tick, uint16 observationIndex, uint16 observationCardinality, uint16 observationCardinalityNext, uint8 feeProtocol, bool unlocked)",
   "function token0() view returns (address)",
   "function token1() view returns (address)",
@@ -691,6 +846,51 @@ ABI.erc20 = [
 ];
 
 /* ======================= interfaces ======================= */
+ABI.posManager = [
+  {"inputs":[{"components":[
+      {"internalType":"address","name":"token0","type":"address"},
+      {"internalType":"address","name":"token1","type":"address"},
+      {"internalType":"uint24","name":"fee","type":"uint24"},
+      {"internalType":"int24","name":"tickLower","type":"int24"},
+      {"internalType":"int24","name":"tickUpper","type":"int24"},
+      {"internalType":"uint256","name":"amount0Desired","type":"uint256"},
+      {"internalType":"uint256","name":"amount1Desired","type":"uint256"},
+      {"internalType":"uint256","name":"amount0Min","type":"uint256"},
+      {"internalType":"uint256","name":"amount1Min","type":"uint256"},
+      {"internalType":"address","name":"recipient","type":"address"},
+      {"internalType":"uint256","name":"deadline","type":"uint256"}],
+    "internalType":"struct MintParams","name":"params","type":"tuple"}],
+   "name":"mint",
+   "outputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"},
+              {"internalType":"uint128","name":"liquidity","type":"uint128"},
+              {"internalType":"uint256","name":"amount0","type":"uint256"},
+              {"internalType":"uint256","name":"amount1","type":"uint256"}],
+   "stateMutability":"payable","type":"function"},
+  {"inputs":[{"internalType":"bytes[]","name":"data","type":"bytes[]"}],"name":"multicall",
+   "outputs":[{"internalType":"bytes[]","name":"results","type":"bytes[]"}],
+   "stateMutability":"payable","type":"function"},
+  {"inputs":[],"name":"refundETH","outputs":[],"stateMutability":"payable","type":"function"},
+  {"inputs":[{"internalType":"address","name":"owner","type":"address"}],"name":"balanceOf",
+   "outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"owner","type":"address"},
+             {"internalType":"uint256","name":"index","type":"uint256"}],"name":"tokenOfOwnerByIndex",
+   "outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"positions",
+   "outputs":[{"internalType":"uint96","name":"nonce","type":"uint96"},
+              {"internalType":"address","name":"operator","type":"address"},
+              {"internalType":"address","name":"token0","type":"address"},
+              {"internalType":"address","name":"token1","type":"address"},
+              {"internalType":"uint24","name":"fee","type":"uint24"},
+              {"internalType":"int24","name":"tickLower","type":"int24"},
+              {"internalType":"int24","name":"tickUpper","type":"int24"},
+              {"internalType":"uint128","name":"liquidity","type":"uint128"},
+              {"internalType":"uint256","name":"f0","type":"uint256"},
+              {"internalType":"uint256","name":"f1","type":"uint256"},
+              {"internalType":"uint128","name":"owed0","type":"uint128"},
+              {"internalType":"uint128","name":"owed1","type":"uint128"}],
+   "stateMutability":"view","type":"function"}
+];
+
 const I = {
   token:      new E.Interface(ABI.token),
   batch:      new E.Interface(ABI.batchMinter),
@@ -699,6 +899,7 @@ const I = {
   buyBurn:    new E.Interface(ABI.buyBurn),
   moreBurner: new E.Interface(ABI.moreBurner),
   pool:       new E.Interface(ABI.pool),
+  posManager: new E.Interface(ABI.posManager),
   mc:         new E.Interface(ABI.multicall),
   erc20:      new E.Interface(ABI.erc20)
 };
@@ -1504,6 +1705,10 @@ async function loadUser() {
     toast("Could not read the global rank, so reward projections are unavailable. Press reload.", "err");
   }
   renderPositions();
+  renderLpQuick();
+  renderLp();
+  refreshLpAllowance().then(paintLpApprove);
+  loadLpPositions();
   renderMintSide();
   renderStake();
   renderHero();
@@ -2419,6 +2624,32 @@ async function pace(entry) {
   const now = Date.now();
   if (entry.nextFreeAt > now) await sleep(entry.nextFreeAt - now);
   entry.nextFreeAt = Date.now() + entry.gap;
+}
+
+/* Same as rpcRetry, but for log queries: pickEndpoint(true) keeps them off the
+   endpoints flagged noLogs, which paginate silently rather than erroring. Using the
+   plain helper for getLogs returns a short answer that looks like a real one. */
+async function rpcLogs(fn, tries = 5) {
+  let last;
+  for (let i = 0; i < tries; i++) {
+    const entry = pickEndpoint(true);
+    try {
+      await pace(entry);
+      const out = await fn(entry.provider);
+      entry.benchedUntil = 0;
+      return out;
+    } catch (e) {
+      /* Unlike a plain call, a refused log query usually means *this* endpoint will
+         not serve this range -- dRPC answers 400 for a wide one -- rather than that
+         the query is wrong. So every failure benches the endpoint and tries the next,
+         instead of giving up the way a non-transient error normally would. */
+      last = e;
+      entry.benchedUntil = Date.now() + 20000;
+      if (i === tries - 1) throw e;
+      await sleep(150 * (i + 1));
+    }
+  }
+  throw last;
 }
 
 async function rpcRetry(fn, tries = 5) {
@@ -3750,6 +3981,532 @@ function renderInflation() {
     overduePanel(sch, dec));
 }
 
+/* ---- providing liquidity ----
+   A v3 range is stored as ticks, where price = 1.0001^tick and that price is token1
+   per token0. Here token0 is WETH and token1 is FUEL, so a figure in ETH per FUEL is
+   the reciprocal: a LOWER price in ETH per FUEL is a HIGHER tick. That inversion is
+   the easiest thing to get backwards, so the panel echoes the range back in the units
+   it was typed in. */
+const LP = { spacing: 200, fee: 10000, busy: false, allowance: null, positions: null, side: "eth", ethBal: null };
+
+/* Enough digits to be exact without turning the box into a wall of zeros. */
+function lpTrim(v, places) {
+  if (!isFinite(v) || v <= 0) return "0";
+  let out = v.toFixed(places);
+  if (out.indexOf(".") >= 0) out = out.replace(/0+$/, "").replace(/[.]$/, "");
+  return out;
+}
+
+function setLpSide(side) {
+  const was = LP.side;
+  LP.side = side === "fuel" ? "fuel" : "eth";
+  $$("#lpSide button").forEach(b => b.classList.toggle("on", b.dataset.lpside === LP.side));
+  const lab = $("#lpAmtLabel");
+  if (lab) lab.textContent = LP.side === "fuel"
+    ? (S.K.symbol || "FUEL") + " to add" : "ETH to add";
+  const inp = $("#lpEth");
+  if (inp && LP.side !== was) {
+    /* The toggle only changes which token you name, not the position: 1.25 ETH
+       becomes the FUEL that pairs with it at this range. Overwriting with a fixed
+       default instead made the quote jump for no reason the user asked for, which
+       looked like the toggle was doing nothing at all. */
+    const a = LP.calc;
+    const other = !a ? null : LP.side === "fuel" ? a.fuel : a.eth;
+    /* 12 places on the ETH side, not 18: a double cannot hold the last few anyway,
+       and rendering them turned 1.25 into 1.250000000000000666. */
+    inp.value = other != null && other > 0
+      ? lpTrim(other, LP.side === "fuel" ? 6 : 12)
+      : (LP.side === "fuel" ? "100000" : "0.01");
+  }
+  const unit = $("#lpAmtUnit");
+  if (unit) unit.textContent = LP.side === "fuel" ? (S.K.symbol || "FUEL") : "ETH";
+  paintLpPct();
+  renderLp();
+  refreshLpAllowance().then(paintLpApprove);
+}
+
+/* What the pool earns, from its own Swap events. Volume is the token0 side, which is
+   WETH, so it is already in ETH. Only two block timestamps are read -- the first and
+   last swap in the window -- rather than one per log. */
+const LPFEE = { busy: false, perDay: null, days: null, swaps: 0, when: 0, tries: 0, lastTry: 0 };
+
+async function loadLpFees() {
+  if (LPFEE.busy) return;
+  LPFEE.busy = true;
+  LPFEE.tries++; LPFEE.lastTry = Date.now();
+  try {
+    const head = await rpcRetry(p => p.getBlockNumber());
+    const topic = I.pool.getEvent("Swap").topicHash;
+
+    /* This chain produces a block every tenth of a second, so a week is six million
+       blocks and asking for it at once never returns. Instead walk backwards in
+       chunks and stop as soon as there is enough to annualise from: enough swaps to
+       not be noise, over a long enough span to mean something. */
+    const CHUNK = 120000;          // roughly three hours here
+    const MAX_CHUNKS = 16;         // so a dead pool gives up rather than grinding
+    const WANT_SWAPS = 80;
+    const WANT_SECS = 6 * 3600;
+
+    let logs = [];
+    let lo = head;
+    let oldest = null;
+    const headBlock = await rpcRetry(p => p.getBlock(head));
+    if (!headBlock) return;
+
+    for (let c = 0; c < MAX_CHUNKS; c++) {
+      const from = Math.max(0, lo - CHUNK);
+      let part = [];
+      try {
+        part = await rpcLogs(p => p.getLogs({ address: A.pool, topics: [topic], fromBlock: from, toBlock: lo }));
+      } catch (_) {
+        // one window nobody would serve: step past it rather than abandoning the scan
+        lo = from - 1;
+        if (lo <= 0) break;
+        continue;
+      }
+      if (part.length) {
+        logs = part.concat(logs);
+        const fb = await rpcRetry(p => p.getBlock(part[0].blockNumber));
+        if (fb) oldest = Number(fb.timestamp);
+      }
+      lo = from - 1;
+      if (lo <= 0) break;
+      const span = oldest == null ? 0 : Number(headBlock.timestamp) - oldest;
+      if (logs.length >= WANT_SWAPS && span >= WANT_SECS) break;
+    }
+
+    if (!logs.length || oldest == null) {
+      LPFEE.perDay = null; LPFEE.days = null; LPFEE.swaps = 0;
+      return;
+    }
+
+    let vol = 0n;
+    for (const l of logs) {
+      const d = I.pool.decodeEventLog("Swap", l.data, l.topics);
+      vol += d.amount0 < 0n ? -d.amount0 : d.amount0;      // token0 is WETH, so already ETH
+    }
+    const days = Math.max(0.02, (Number(headBlock.timestamp) - oldest) / 86400);
+    const feeEth = Number(E.formatEther(vol)) * LP.fee / 1e6;   // fee is hundredths of a bip
+    LPFEE.perDay = feeEth / days;
+    LPFEE.days = days;
+    LPFEE.swaps = logs.length;
+    LPFEE.when = Date.now();
+  } catch (_) {
+    LPFEE.perDay = null;
+  } finally {
+    LPFEE.busy = false;
+    renderLp();
+  }
+}
+
+/* The liquidity a deposit would mint, so the share of fees can be worked out against
+   the liquidity already in the pool. Same formula the pool uses, in floating point,
+   which is accurate enough for a projection. */
+function lpLiquidityFor(range, a) {
+  const cur = lpCurrentTick();
+  if (!range || !a || cur == null) return null;
+  const sq = t => Math.pow(1.0001, t / 2);
+  const sa = sq(range.lower), sb = sq(range.upper), sp = sq(cur);
+  /* The pool reports liquidity in wei-scaled units, so the amount has to be in wei
+     too or the share comes out 1e18 times too small and every APY reads zero. */
+  const wei = a.eth * 1e18;
+  if (cur < range.lower) return wei / (1 / sa - 1 / sb);
+  if (cur >= range.upper) return null;
+  return wei / (1 / sp - 1 / sb);
+}
+
+/* Fees only accrue while the price is inside the range, so a range that does not
+   cover spot earns nothing today however wide it is. */
+function lpApy(range, a) {
+  if (LPFEE.perDay == null || !range || !a) return null;
+  const cur = lpCurrentTick();
+  if (cur == null) return { pct: 0, inRange: false };
+  if (cur < range.lower || cur >= range.upper) return { pct: 0, inRange: false };
+  const mine = lpLiquidityFor(range, a);
+  const pool = S.L && S.L.poolLiquidity != null ? Number(S.L.poolLiquidity) : null;
+  if (!mine || pool == null) return null;
+  const share = mine / (pool + mine);
+  const spot = tickToPrice(cur);
+  const capital = a.eth + (a.fuel || 0) * spot;
+  if (!(capital > 0)) return null;
+  const perDay = LPFEE.perDay * share;
+  return { pct: (perDay * 365 / capital) * 100, inRange: true, share, perDay };
+}
+
+/* These prices run past ten decimal places, and exponent notation is hard to compare
+   at a glance. Written out in full instead, with enough significant figures to tell
+   two nearby prices apart and no trailing zeros. */
+function plainPrice(v, sig) {
+  if (!isFinite(v) || v === 0) return "0";
+  const neg = v < 0; v = Math.abs(v);
+  const lead = Math.ceil(-Math.log10(v));          // zeros between the point and the digits
+  const places = Math.min(100, Math.max(0, lead + (sig || 5) - 1));
+  let out = v.toFixed(places);
+  if (out.indexOf(".") >= 0) out = out.replace(/0+$/, "").replace(/[.]$/, "");
+  return (neg ? "-" : "") + out;
+}
+
+function lpCurrentTick() {
+  const s0 = S.L && S.L.slot0;
+  return s0 && s0[1] != null ? Number(s0[1]) : null;
+}
+function priceToTick(ethPerFuel) {
+  if (!(ethPerFuel > 0)) return null;
+  return Math.log(1 / ethPerFuel) / Math.log(1.0001);
+}
+function tickToPrice(tick) { return 1 / Math.pow(1.0001, tick); }
+function alignTick(t, up) {
+  const r = up ? Math.ceil(t / LP.spacing) : Math.floor(t / LP.spacing);
+  return r * LP.spacing;
+}
+function lpRange() {
+  const a = Number(($("#lpLow") || {}).value), b = Number(($("#lpHigh") || {}).value);
+  if (!(a > 0) || !(b > 0)) return null;
+  const t1 = priceToTick(a), t2 = priceToTick(b);
+  if (t1 == null || t2 == null) return null;
+  const lower = alignTick(Math.min(t1, t2), false);
+  const upper = alignTick(Math.max(t1, t2), true);
+  return upper > lower ? { lower, upper } : null;
+}
+
+/* Standard v3 sizing: below the range it is all token0 (WETH), above it all token1
+   (FUEL), inside a mix set by where the price sits. Either side can be the one you
+   name -- the other is then derived, and a side the range does not use is zero. */
+function lpWhere(range, cur) {
+  if (cur < range.lower) return "below";
+  if (cur >= range.upper) return "above";
+  return "inside";
+}
+
+function lpAmounts(range, ethWei) {
+  const cur = lpCurrentTick();
+  if (!range || cur == null || !ethWei) return null;
+  const sq = t => Math.pow(1.0001, t / 2);
+  const sa = sq(range.lower), sb = sq(range.upper), sp = sq(cur);
+  const eth = Number(E.formatEther(ethWei));
+  const where = lpWhere(range, cur);
+  if (where === "below") return { eth, fuel: 0, where, from: "eth" };
+  if (where === "above") return { eth: 0, fuel: null, where, from: "eth" };
+  const L = eth / (1 / sp - 1 / sb);
+  return { eth, fuel: L * (sp - sa), where, from: "eth" };
+}
+
+/* The mirror: name the FUEL and the ETH follows. */
+function lpAmountsFromFuel(range, fuelWei) {
+  const cur = lpCurrentTick();
+  if (!range || cur == null || !fuelWei) return null;
+  const sq = t => Math.pow(1.0001, t / 2);
+  const sa = sq(range.lower), sb = sq(range.upper), sp = sq(cur);
+  const fuel = Number(E.formatUnits(fuelWei, S.K.decimals ?? 18));
+  const where = lpWhere(range, cur);
+  // a range wholly below spot holds no FUEL at all, so FUEL cannot size it
+  if (where === "below") return { eth: null, fuel, where, from: "fuel" };
+  if (where === "above") return { eth: 0, fuel, where, from: "fuel" };
+  const L = fuel / (sp - sa);
+  return { eth: L * (1 / sp - 1 / sb), fuel, where, from: "fuel" };
+}
+
+function lpReadAmounts(range) {
+  const raw = String(($("#lpEth") || {}).value || "0");
+  try {
+    return LP.side === "fuel"
+      ? lpAmountsFromFuel(range, E.parseUnits(raw, S.K.decimals ?? 18))
+      : lpAmounts(range, E.parseEther(raw));
+  } catch (_) { return null; }
+}
+
+function lpVsSpot(range, cur) {
+  if (!range || cur == null) return null;
+  const spot = tickToPrice(cur);
+  const lo = tickToPrice(range.upper), hi = tickToPrice(range.lower);
+  const say = p => {
+    const r = p / spot;
+    /* A little past 2x either way, so a band snapped one tick-spacing (~2%) off
+       an exact half or double still reads as a percentage rather than "2.0x". */
+    if (r >= 0.49 && r <= 2.04) return (r >= 1 ? "+" : "") + ((r - 1) * 100).toFixed(1) + "%";
+    return r < 1 ? (1 / r).toFixed(r < 0.01 ? 0 : 1) + "x below"
+                 : r.toFixed(r > 100 ? 0 : 1) + "x above";
+  };
+  const inside = cur > range.lower && cur < range.upper;
+  return say(lo) + " \u2026 " + say(hi) + (inside ? "  (covers spot)" : "");
+}
+
+/* Presets around the live price, so the common case needs no arithmetic. */
+function renderLpQuick() {
+  const pl = $("#lpPoolLink");
+  if (pl && !pl.innerHTML) pl.innerHTML = link(A.pool);
+  /* The mark already sits in the masthead, so every copy here points at that one
+     rather than embedding the base64 again. */
+  const src = burnMarkSrc("fuel");
+  if (src) $$(".lpmark").forEach(n => { if (n.tagName === "IMG" && !n.src) n.src = src; });
+  renderLpPct();
+  const host = $("#lpQuick");
+  if (!host) return;
+  host.innerHTML = "";
+  const cur = lpCurrentTick();
+  if (cur == null) return;
+  /* Each label says exactly what it does: "50%" is half the price to half again,
+     and the rest are that many times down and up. The x presets have to multiply
+     rather than subtract — 50% below spot is a price, 50x below spot is not. */
+  for (const [label, lo, hi] of [["50%", 0.5, 1.5], ["2x", 0.5, 2], ["10x", 0.1, 10], ["50x", 0.02, 50]]) {
+    const b = el("button", "btn sm fixed", label);
+    b.style.flex = "1";
+    b.onclick = () => {
+      const spot = tickToPrice(cur);
+      $("#lpLow").value = plainPrice(spot * lo, 6);
+      $("#lpHigh").value = plainPrice(spot * hi, 6);
+      renderLp();
+    };
+    host.appendChild(b);
+  }
+}
+
+function renderLp() {
+  const ticks = $("#lpTicks");
+  if (!ticks) return;
+  const spot = $("#lpSpot"), vs = $("#lpVsSpot"),
+        n0 = $("#lpNeed0"), n1 = $("#lpNeed1"), note = $("#lpNote");
+  const cur = lpCurrentTick();
+  spot.textContent = cur == null ? "\u2014" : plainPrice(tickToPrice(cur)) + " ETH per FUEL";
+
+  const range = lpRange();
+  if (!range) {
+    ticks.textContent = "\u2014"; vs.textContent = "\u2014";
+    n0.textContent = "\u2014"; n1.textContent = "\u2014";
+    note.textContent = "Enter two different prices, or use a preset.";
+    LP.calc = null; paintLpButton(); return;
+  }
+  ticks.textContent = range.lower + " \u2026 " + range.upper;
+  vs.textContent = lpVsSpot(range, cur) || "\u2014";
+
+  const a = lpReadAmounts(range);
+  LP.calc = a ? { ...a, range } : null;
+  n0.textContent = !a ? "\u2014"
+    : a.eth == null ? "this range holds no ETH \u2014 name the ETH side instead"
+    : a.eth === 0 ? "none" : fmtEth(E.parseEther(a.eth.toFixed(18)));
+  n1.textContent = !a ? "\u2014"
+    : a.fuel == null ? "this range holds no " + (S.K.symbol || "FUEL") + " \u2014 name the " + (S.K.symbol || "FUEL") + " side instead"
+    : a.fuel === 0 ? "none" : fmtTok(E.parseUnits(a.fuel.toFixed(18), 18), S.K.decimals, S.K.symbol);
+
+  const apyNode = $("#lpApy");
+  if (apyNode) {
+    const r = lpApy(range, a);
+    apyNode.textContent =
+      LPFEE.perDay == null ? (LPFEE.busy ? "reading\u2026" : "\u2014")
+      : !r ? "\u2014"
+      : !r.inRange ? "0% \u2014 the range does not cover today's price"
+      : (r.pct >= 1000 ? Math.round(r.pct).toLocaleString() : r.pct.toFixed(1)) + "%";
+  }
+
+  const lo = tickToPrice(range.upper), hi = tickToPrice(range.lower);
+  const snapped = "Snapped to the pool's tick spacing: " +
+    plainPrice(lo) + " \u2026 " + plainPrice(hi) + " ETH per FUEL. ";
+  if (!a) { note.textContent = snapped; paintLpButton(); return; }
+  note.textContent = snapped + (
+    a.where === "below"
+      ? "The whole range sits below today's price, so this is a standing offer to buy FUEL on " +
+        "the way down: it takes only ETH, and turns into FUEL if the price falls that far. It " +
+        "earns nothing until then."
+    : a.where === "above"
+      ? "The whole range sits above today's price, so it would take only FUEL, not ETH. Move the " +
+        "range around the current price."
+      : "The range covers today's price, so it takes both tokens and starts earning fees at once.");
+
+  if (LPFEE.perDay != null && LPFEE.days) {
+    const r = lpApy(range, a);
+    note.textContent += ` The pool took ${fmtEth(E.parseEther(LPFEE.perDay.toFixed(18)))} a day in fees ` +
+      `over the last ${LPFEE.days.toFixed(1)} days (${LPFEE.swaps.toLocaleString()} swaps)` +
+      (r && r.inRange ? `, and this range would hold ${r.share * 100 < 0.01 ? "under 0.01" : (r.share * 100).toFixed(2)}% of the liquidity earning them` : "") +
+      ". That is what has already happened, not a forecast \u2014 fees stop the moment the price leaves the range.";
+  }
+  paintLpButton();
+}
+
+function paintLpApprove() {
+  const box = $("#lpApprove"), node = $("#lpAllow");
+  if (!box) return;
+  const needsFuel = LP.calc && LP.calc.fuel > 0;
+  box.style.display = (needsFuel && S.account) ? "" : "none";
+  if (node) {
+    node.textContent = LP.allowance == null ? "approved: reading\u2026"
+      : LP.allowance >= (2n ** 128n) ? "approved: unlimited"
+      : LP.allowance === 0n ? "approved: nothing yet"
+      : "approved: " + fmtTok(LP.allowance, S.K.decimals, S.K.symbol);
+  }
+}
+
+function paintLpButton() {
+  const b = $("#btnLp");
+  if (!b) return;
+  if (!S.account) { b.textContent = "Connect wallet"; b.disabled = false; return; }
+  if (LP.busy) { b.textContent = "Working\u2026"; b.disabled = true; return; }
+  const a = LP.calc;
+  // a side the range cannot use leaves the other one unknowable, so there is nothing to send
+  if (!a || a.eth == null || a.fuel == null) { b.textContent = "Add liquidity"; b.disabled = true; return; }
+  if (a.fuel > 0 && LP.allowance != null && LP.allowance < (2n ** 128n)) {
+    b.textContent = "Approve " + S.K.symbol; b.disabled = false; return;
+  }
+  b.textContent = "Add liquidity";
+  b.disabled = !(a.eth > 0 || a.fuel > 0);
+}
+
+async function refreshLpAllowance() {
+  LP.allowance = null;
+  if (!S.account) return;
+  try {
+    const r = await mc([{ to: A.token, iface: I.token, fn: "allowance", args: [S.account, A.posManager] }]);
+    LP.allowance = r[0] ?? null;
+  } catch (_) {}
+  /* The percent buttons need spendable ETH, which no other panel reads. The FUEL
+     side already has S.balance from the mint load. */
+  try { LP.ethBal = await rpcRetry(p => p.getBalance(S.account)); } catch (_) { LP.ethBal = null; }
+  paintLpPct();
+}
+
+/* Gas has to survive the mint itself, so "Max" on the ETH side stops short of the
+   whole balance. Blocks here are cheap; this is deliberately generous. */
+const LP_GAS_RESERVE = 500000000000000n;   // 0.0005 ETH
+
+function lpSideBalance() {
+  if (LP.side === "fuel") {
+    return S.balance == null ? null : { raw: S.balance, dec: S.K.decimals, sym: S.K.symbol || "FUEL" };
+  }
+  return LP.ethBal == null ? null : { raw: LP.ethBal, dec: 18, sym: "ETH" };
+}
+
+function paintLpPct() {
+  const host = $("#lpPct"), note = $("#lpBal");
+  if (!host) return;
+  const bal = lpSideBalance();
+  $$("#lpPct button").forEach(b => { b.disabled = !S.account || !bal; });
+  if (!note) return;
+  if (!S.account) { note.textContent = "Connect a wallet to fill from your balance."; return; }
+  if (!bal) { note.textContent = "Could not read your balance."; return; }
+  note.textContent = "You hold " + fmtTok(bal.raw, bal.dec, bal.sym) +
+    (LP.side === "eth" ? ". Max leaves a little behind for gas." : ".");
+}
+
+function renderLpPct() {
+  const host = $("#lpPct");
+  if (!host || host.children.length) return;
+  for (const [label, num, den] of [["25%", 1n, 4n], ["50%", 1n, 2n], ["75%", 3n, 4n], ["Max", 1n, 1n]]) {
+    const b = el("button", "btn sm fixed", label);
+    b.style.flex = "1";
+    b.onclick = () => {
+      const bal = lpSideBalance();
+      if (!bal) return;
+      let raw = bal.raw * num / den;
+      /* Only Max risks leaving nothing behind; a quarter of a balance needs no haircut. */
+      if (LP.side === "eth" && num === den) raw = raw > LP_GAS_RESERVE ? raw - LP_GAS_RESERVE : 0n;
+      const inp = $("#lpEth");
+      if (!inp) return;
+      /* Trailing zeros on an 18-decimal string make the box unreadable. */
+      inp.value = E.formatUnits(raw, bal.dec).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+      renderLp();
+    };
+    host.appendChild(b);
+  }
+  paintLpPct();
+}
+
+async function doLpApprove() {
+  const signer = await guard();
+  LP.busy = true; paintLpButton();
+  try {
+    const tok = new E.Contract(A.token, ABI.token, signer);
+    await send("Approve " + S.K.symbol + " for the position manager",
+      () => tok.approve(A.posManager, E.MaxUint256));
+    await refreshLpAllowance();
+  } finally { LP.busy = false; paintLpApprove(); paintLpButton(); }
+}
+
+async function doAddLiquidity() {
+  const a = LP.calc;
+  if (!a || a.eth == null || a.fuel == null) return;
+  if (a.fuel > 0 && !(LP.allowance != null && LP.allowance >= (2n ** 128n))) { await doLpApprove(); return; }
+  const signer = await guard();
+  LP.busy = true; paintLpButton();
+  try {
+    /* Whichever side was typed, both are sent: the one named exactly, the other from
+       the sizing above with a little headroom. */
+    const eth = a.eth > 0 ? E.parseEther(a.eth.toFixed(18)) : 0n;
+    /* The desired figures are a ceiling, not a spend: the manager pulls only what the
+       liquidity needs and refunds the rest, so headroom on the FUEL side absorbs a
+       price move between quoting and mining. */
+    const fuelWant = a.fuel > 0 ? E.parseUnits((a.fuel * 1.02).toFixed(18), 18) : 0n;
+    const params = {
+      token0: A.weth, token1: A.token, fee: LP.fee,
+      tickLower: a.range.lower, tickUpper: a.range.upper,
+      amount0Desired: eth, amount1Desired: fuelWant,
+      amount0Min: eth * 9700n / 10000n,
+      amount1Min: fuelWant * 9700n / 10000n,
+      recipient: S.account,
+      deadline: BigInt(Math.floor(chainNow()) + 1800)
+    };
+    const pm = new E.Contract(A.posManager, ABI.posManager, signer);
+    await send("Add liquidity", () => pm.multicall([
+      I.posManager.encodeFunctionData("mint", [params]),
+      I.posManager.encodeFunctionData("refundETH", [])
+    ], { value: eth }));
+    await refreshLpAllowance();
+    await loadLpPositions();
+  } finally { LP.busy = false; paintLpApprove(); paintLpButton(); }
+}
+
+/* Positions are ERC-721s, so they are enumerated off the wallet and then filtered to
+   this pool: one wallet may hold positions in others. */
+async function loadLpPositions() {
+  const host = $("#lpList");
+  if (!host) return;
+  if (!S.account) { LP.positions = null; renderLpPositions(); return; }
+  const btn = $("#btnLpRefresh");
+  if (btn) btn.disabled = true;
+  host.innerHTML = `<div class="derived">Reading\u2026</div>`;
+  try {
+    const n = (await mc([{ to: A.posManager, iface: I.posManager, fn: "balanceOf", args: [S.account] }]))[0];
+    const count = Number(n ?? 0n);
+    if (!count) { LP.positions = []; renderLpPositions(); return; }
+    const ids = await mc(Array.from({ length: Math.min(count, 40) }, (_, i) => ({
+      to: A.posManager, iface: I.posManager, fn: "tokenOfOwnerByIndex", args: [S.account, BigInt(i)] })));
+    const live = ids.filter(x => x != null);
+    const infos = await mc(live.map(id => ({
+      to: A.posManager, iface: I.posManager, fn: "positions", args: [id] })));
+    const mine = [];
+    live.forEach((id, i) => {
+      const p = infos[i];
+      if (!p) return;
+      if (String(p[2]).toLowerCase() !== A.weth.toLowerCase()) return;
+      if (String(p[3]).toLowerCase() !== A.token.toLowerCase()) return;
+      if (Number(p[4]) !== LP.fee) return;
+      mine.push({ id, tickLower: Number(p[5]), tickUpper: Number(p[6]), liquidity: p[7] });
+    });
+    LP.positions = mine;
+  } catch (_) { LP.positions = null; }
+  finally { if (btn) btn.disabled = false; renderLpPositions(); }
+}
+
+function renderLpPositions() {
+  const host = $("#lpList");
+  if (!host) return;
+  if (!S.account) { host.innerHTML = `<div class="derived">Connect a wallet to see your positions.</div>`; return; }
+  if (LP.positions == null) { host.innerHTML = `<div class="derived">Could not read your positions.</div>`; return; }
+  if (!LP.positions.length) { host.innerHTML = `<div class="derived">No positions in this pool yet.</div>`; return; }
+  const cur = lpCurrentTick();
+  host.innerHTML = "";
+  for (const p of LP.positions) {
+    const lo = tickToPrice(p.tickUpper), hi = tickToPrice(p.tickLower);
+    const inRange = cur != null && cur >= p.tickLower && cur < p.tickUpper;
+    const empty = !p.liquidity || p.liquidity === 0n;
+    const box = el("div", "run");
+    box.innerHTML =
+      `<div><strong>#${p.id}</strong> \u00b7 ticks ${p.tickLower}\u2013${p.tickUpper}
+         \u00b7 <span class="addr">${plainPrice(lo, 4)} \u2026 ${plainPrice(hi, 4)} ETH per FUEL</span></div>
+       <div class="derived">${empty ? "no liquidity left" : "liquidity " + p.liquidity} \u00b7
+         ${inRange ? "in range, earning fees" : "out of range, earning nothing"}</div>`;
+    host.appendChild(box);
+  }
+}
+
 /* ---- who has burned $FUEL ----
    Two sinks count as destruction: the dead address, and zero. Staking burns to zero
    as well and is not destruction -- those tokens are minted back on withdraw -- so any
@@ -3814,7 +4571,7 @@ async function loadBurners() {
        skipped -- a partial scan would understate a burner. */
     const pull = async (from, to, sink) => {
       try {
-        return await rpcRetry(p => p.getLogs({
+        return await rpcLogs(p => p.getLogs({
           address: A.token, topics: [topic, null, pad(sink)], fromBlock: from, toBlock: to }));
       } catch (e) {
         if (to - from < 2 || !/exceed|limit|too many|range/i.test(String(e && e.message))) throw e;
@@ -4594,6 +5351,14 @@ try {
 
   on("#btnStatsRefresh", "click", restartStats);
   on("#btnTopLoad", "click", restartTopHolders);
+  for (const id of ["#lpLow", "#lpHigh", "#lpEth"]) on(id, "input", renderLp);
+  on("#lpSide", "click", e => {
+    const b = e.target.closest("[data-lpside]");
+    if (b) setLpSide(b.dataset.lpside);
+  });
+  on("#btnLpApprove", "click", doLpApprove);
+  on("#btnLpRefresh", "click", loadLpPositions);
+  on("#btnLp", "click", () => { if (!S.account) connect(); else doAddLiquidity(); });
   on("#btnBurnLoad", "click", () => {
     if (scanBusy()) { burnSay("Another scan is running. It finishes first, then press this."); return; }
     loadBurners();
@@ -4740,6 +5505,30 @@ function tick() {
   safe("hero", renderHero);
   safe("scan buttons", paintScanButtons);
   safe("unlock timers", refreshSoonTimers);
+  if (S.loaded && !LP._primed) {
+    LP._primed = true;
+    safe("liquidity panel", () => {
+      renderLpQuick();
+      /* Opening on empty boxes makes every figure a dash and the panel look broken.
+         A sensible band around the live price gives it something to say. */
+      const cur = lpCurrentTick();
+      const lo = $("#lpLow"), hi = $("#lpHigh");
+      if (cur != null && lo && hi && !lo.value && !hi.value) {
+        const spot = tickToPrice(cur);
+        lo.value = plainPrice(spot * 0.75, 6);
+        hi.value = plainPrice(spot * 1.25, 6);
+      }
+      renderLp();
+      renderLpPositions();
+    });
+    safe("pool fees", () => { loadLpFees().catch(() => {}); });
+  }
+  /* A first attempt can lose to an endpoint that refuses the range. Rather than
+     leaving the APY blank for the whole session, try a few more times, slowly. */
+  if (S.loaded && LPFEE.perDay == null && !LPFEE.busy &&
+      LPFEE.tries > 0 && LPFEE.tries < 4 && Date.now() - LPFEE.lastTry > 20000) {
+    safe("pool fees retry", () => { loadLpFees().catch(() => {}); });
+  }
   if (Date.now() - lastTick > 10000) {
     lastTick = Date.now();
     if (S.account) safe("positions", renderPositions);
