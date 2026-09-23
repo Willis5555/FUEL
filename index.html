@@ -3461,9 +3461,14 @@ const INFL = { range: "all" };
 /* Every short window keeps 48 columns, so they read at the same density however far
    out they look: 4 hours in 5-minute steps, 12 in quarter hours, a day in halves. */
 const INFL_WINDOWS = {
-  "4h":  { step: 300,  count: 48, label: "Next 4 hours",  span: "4 hours",  word: "5 minutes" },
-  "12h": { step: 900,  count: 48, label: "Next 12 hours", span: "12 hours", word: "15 minutes" },
-  "24h": { step: 1800, count: 48, label: "Next 24 hours", span: "24 hours", word: "30 minutes" }
+  "4h":  { step: 300,   count: 48, label: "Next 4 hours",  span: "4 hours",  word: "5 minutes" },
+  "12h": { step: 900,   count: 48, label: "Next 12 hours", span: "12 hours", word: "15 minutes" },
+  "24h": { step: 1800,  count: 48, label: "Next 24 hours", span: "24 hours", word: "30 minutes" },
+  /* Past a day the step is chosen to divide the span exactly rather than to keep a
+     fixed column count, so every bucket is a round unit of time someone can name. */
+  "3d":  { step: 3600,  count: 72, label: "Next 3 days",   span: "3 days",   word: "hour" },
+  "7d":  { step: 10800, count: 56, label: "Next 7 days",   span: "7 days",   word: "3 hours" },
+  "30d": { step: 86400, count: 30, label: "Next 30 days",  span: "30 days",  word: "day", daily: true }
 };
 
 function inflationSchedule(range) {
@@ -3518,7 +3523,7 @@ function inflationSchedule(range) {
     }
     const bars = add.map((v, i) => ({ t: now + i * step, v }));
     late.sort((a, b) => a.ts - b.ts);
-    return { pts, bars, hourly: true, stepDays: 0, spanDays: 1, win,
+    return { pts, bars, hourly: !win.daily, stepDays: 0, spanDays: 1, win,
              overdue, overdueCount, overdueList: late, beyond, beyondCount,
              mints: inWindow, end: run, arriving: run - S.L.totalSupply };
   }
@@ -3712,8 +3717,13 @@ function renderInflation() {
         this window \u2014 switch to the full schedule to see it.`
     : " Nothing else is scheduled beyond this window.";
 
-  const lead = sch.hourly
-    ? `The next ${sch.win.span} in ${sch.win.word.replace(/^1 /, "")} steps. Today's supply plus
+  /* "3 hours steps" reads wrong; a plural unit needs hyphenating as a modifier. */
+  const stepPhrase = !sch.win ? "" :
+    sch.win.word === "day" ? "daily" :
+    sch.win.word === "hour" ? "hourly" :
+    sch.win.word.replace(/^(\d+) (minute|hour|day)s?$/, "$1-$2") + " ";
+  const lead = sch.win
+    ? `The next ${sch.win.span} in ${stepPhrase.trim()} steps. Today's supply plus
        <strong>${fmtTok(sch.arriving, dec, S.K.symbol)}</strong> arriving from
        ${sch.mints.toLocaleString()} mint${sch.mints === 1 ? "" : "s"} maturing inside it,
        reaching <strong>${fmtTok(sch.end, dec, S.K.symbol)}</strong>${multTxt}.${overdueTxt}${beyondTxt}${partialTxt}`
@@ -3732,7 +3742,9 @@ function renderInflation() {
      <p class="note">What each ${stepWord} actually brings, rather than where the running total
        gets to \u2014 these columns are the steps the line above adds up. The heaviest is
        <strong>${fmtTok(peak.v, dec, S.K.symbol)}</strong> ${sch.hourly
-         ? "in the " + sch.win.word + " to " + new Date(peak.t * 1000).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+         ? (sch.win && sch.win.daily
+             ? "on " + fmtDate(peak.t)
+             : "in the " + sch.win.word + " to " + new Date(peak.t * 1000).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }))
          : "on " + fmtDate(peak.t)}.</p>` +
     svgBars(barPts, barOpts) +
     overduePanel(sch, dec));
