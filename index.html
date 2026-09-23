@@ -312,6 +312,56 @@ input[type=range]{width:100%;accent-color:var(--accent-dim)}
    be the wrapper around it. */
 /* the burner rows carry each protocol's own mark, at a size that lines up with the
    text rather than dominating it */
+/* ---- one position, one card ----------------------------------------------------
+   The old row led with a raw liquidity integer, which is the one figure in here that
+   means nothing on its own. These lead with what the position holds, and carry the
+   state in a pill and a bar so it reads before the words do. */
+.lpcard{
+  border:1px solid var(--line);border-left:2px solid var(--dim);
+  background:var(--panel-2);padding:13px 15px;margin:10px 0;
+}
+.lpcard.live{border-left-color:var(--tab-on)}
+.lpcard.wait{border-left-color:var(--amber)}
+.lpcard.closed{border-left-color:var(--line);opacity:.62}
+.lpcard-top{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.lpcard-id{font-family:var(--mono);font-size:12px;color:var(--dim);text-decoration:none}
+.lpcard-id:hover{color:var(--tab-on)}
+.lppill{
+  margin-left:auto;font-family:var(--mono);font-size:10px;letter-spacing:.07em;
+  text-transform:uppercase;padding:3px 8px;border:1px solid currentColor;
+}
+.lppill.live{color:var(--tab-on)}
+.lppill.wait{color:var(--amber)}
+.lppill.closed{color:var(--dim)}
+.lpcard-holds{font-family:var(--serif);font-size:16px;color:var(--text);line-height:1.45}
+.lpplus{color:var(--dim);padding:0 3px}
+.lpdimtext{color:var(--dim);font-size:14px}
+
+.lpfees{
+  display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-top:7px;
+  font-family:var(--sans);font-size:13px;color:var(--tab-on);
+}
+.lpfees-k{
+  font-family:var(--mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--dim);
+}
+.lpfees.none{color:var(--dim);font-size:12px}
+
+/* the band, with today's price marked on it */
+.lpbar{position:relative;height:4px;background:var(--bg);border:1px solid var(--line);margin:12px 0 6px}
+.lpbar-fill{position:absolute;inset:0;background:rgba(99,224,138,.16)}
+.lpcard.wait .lpbar-fill{background:rgba(224,179,88,.14)}
+.lpcard.closed .lpbar-fill{background:transparent}
+.lpbar-now{position:absolute;top:-4px;width:2px;height:10px;background:var(--text);margin-left:-1px}
+.lpcard.live .lpbar-now{background:var(--tab-on)}
+
+.lpcard-range{
+  display:flex;justify-content:space-between;gap:10px;
+  font-family:var(--mono);font-size:11px;color:var(--text-dim);
+}
+.lpcard-mid{color:var(--dim);text-align:center;font-family:var(--sans);font-size:11.5px}
+.lpcard-foot{font-family:var(--mono);font-size:10.5px;color:var(--dim);margin-top:7px}
+
 /* ---- provide liquidity ---------------------------------------------------
    The form is two columns: what you choose on the left, what it costs on the
    right, so the numbers sit beside the controls that change them rather than
@@ -866,6 +916,16 @@ ABI.posManager = [
    "outputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"},
               {"internalType":"uint128","name":"liquidity","type":"uint128"},
               {"internalType":"uint256","name":"amount0","type":"uint256"},
+              {"internalType":"uint256","name":"amount1","type":"uint256"}],
+   "stateMutability":"payable","type":"function"},
+  {"inputs":[{"components":[
+      {"internalType":"uint256","name":"tokenId","type":"uint256"},
+      {"internalType":"address","name":"recipient","type":"address"},
+      {"internalType":"uint128","name":"amount0Max","type":"uint128"},
+      {"internalType":"uint128","name":"amount1Max","type":"uint128"}],
+    "internalType":"struct CollectParams","name":"params","type":"tuple"}],
+   "name":"collect",
+   "outputs":[{"internalType":"uint256","name":"amount0","type":"uint256"},
               {"internalType":"uint256","name":"amount1","type":"uint256"}],
    "stateMutability":"payable","type":"function"},
   {"inputs":[{"internalType":"bytes[]","name":"data","type":"bytes[]"}],"name":"multicall",
@@ -4105,19 +4165,27 @@ function lpLiquidityFor(range, a) {
   const sa = sq(range.lower), sb = sq(range.upper), sp = sq(cur);
   /* The pool reports liquidity in wei-scaled units, so the amount has to be in wei
      too or the share comes out 1e18 times too small and every APY reads zero. */
-  const wei = a.eth * 1e18;
-  if (cur < range.lower) return wei / (1 / sa - 1 / sb);
-  if (cur >= range.upper) return null;
-  return wei / (1 / sp - 1 / sb);
+  if (cur < range.lower) return (a.eth * 1e18) / (1 / sa - 1 / sb);
+  /* Above today's price the band holds only FUEL, so its liquidity comes from the
+     FUEL side of the same formula. This used to return null, which is why a band on
+     the FUEL side could never be priced. */
+  if (cur >= range.upper) return a.fuel == null ? null : (a.fuel * 1e18) / (sb - sa);
+  return (a.eth * 1e18) / (1 / sp - 1 / sb);
 }
 
 /* Fees only accrue while the price is inside the range, so a range that does not
    cover spot earns nothing today however wide it is. */
+/* A one-sided band earns nothing today, but it is not unpriceable: what it would earn
+   once the price moves into it follows from the same arithmetic, on two assumptions
+   worth being clear about — that the pool keeps taking fees at its recent rate, and
+   that the liquidity sitting at those prices looks like the liquidity here today. The
+   second is the shakier one: nobody can read the book at a price the pool has not
+   reached. */
 function lpApy(range, a) {
   if (LPFEE.perDay == null || !range || !a) return null;
   const cur = lpCurrentTick();
-  if (cur == null) return { pct: 0, inRange: false };
-  if (cur < range.lower || cur >= range.upper) return { pct: 0, inRange: false };
+  if (cur == null) return null;
+  const inRange = cur >= range.lower && cur < range.upper;
   const mine = lpLiquidityFor(range, a);
   const pool = S.L && S.L.poolLiquidity != null ? Number(S.L.poolLiquidity) : null;
   if (!mine || pool == null) return null;
@@ -4126,7 +4194,7 @@ function lpApy(range, a) {
   const capital = a.eth + (a.fuel || 0) * spot;
   if (!(capital > 0)) return null;
   const perDay = LPFEE.perDay * share;
-  return { pct: (perDay * 365 / capital) * 100, inRange: true, share, perDay };
+  return { pct: (perDay * 365 / capital) * 100, inRange, share, perDay };
 }
 
 /* These prices run past ten decimal places, and exponent notation is hard to compare
@@ -4316,15 +4384,13 @@ function renderLp() {
   const apyNode = $("#lpApy");
   if (apyNode) {
     const r = lpApy(range, a);
-    /* A one-sided band is out of range by definition, so the honest headline is that
-       it earns nothing today, not a rate it is not being paid. */
+    /* The rate is the same either way; what changes is whether it is being paid yet. */
     apyNode.textContent =
       LPFEE.perDay == null ? (LPFEE.busy ? "reading\u2026" : "\u2014")
       : !r ? "\u2014"
-      : !r.inRange ? "0% today"
       : (r.pct >= 1000 ? Math.round(r.pct).toLocaleString() : r.pct.toFixed(1)) + "%";
     const apyKey = $(".lpapyk");
-    if (apyKey) apyKey.textContent = r && !r.inRange ? "Earns while filling" : "Estimated APY";
+    if (apyKey) apyKey.textContent = r && !r.inRange ? "Est. APY while filling" : "Estimated APY";
   }
 
   const lo = tickToPrice(range.upper), hi = tickToPrice(range.lower);
@@ -4347,10 +4413,18 @@ function renderLp() {
 
   if (LPFEE.perDay != null && LPFEE.days) {
     const r = lpApy(range, a);
+    const pct = r ? (r.share * 100 < 0.01 ? "under 0.01" : (r.share * 100).toFixed(2)) : null;
     note.textContent += ` The pool took ${fmtEth(E.parseEther(LPFEE.perDay.toFixed(18)))} a day in fees ` +
       `over the last ${LPFEE.days.toFixed(1)} days (${LPFEE.swaps.toLocaleString()} swaps)` +
-      (r && r.inRange ? `, and this range would hold ${r.share * 100 < 0.01 ? "under 0.01" : (r.share * 100).toFixed(2)}% of the liquidity earning them` : "") +
-      ". That is what has already happened, not a forecast \u2014 fees stop the moment the price leaves the range.";
+      (!r ? "" : r.inRange
+        ? `, and this range would hold ${pct}% of the liquidity earning them`
+        : `, and this band would hold ${pct}% of the liquidity earning them once the price reached it`) +
+      ". That is what has already happened, not a forecast \u2014 fees stop the moment the price leaves the range." +
+      (r && !r.inRange
+        ? " The rate above assumes both that the pool keeps earning at that pace and that the liquidity " +
+          "waiting at your prices looks like the liquidity here today, which nobody can actually read " +
+          "until the price gets there."
+        : "");
   }
   paintLpButton();
 }
@@ -4514,8 +4588,29 @@ async function loadLpPositions() {
       mine.push({ id, tickLower: Number(p[5]), tickUpper: Number(p[6]), liquidity: p[7] });
     });
     LP.positions = mine;
+    await loadLpFeesOwed(mine);
   } catch (_) { LP.positions = null; }
   finally { if (btn) btn.disabled = false; renderLpPositions(); }
+}
+
+/* The manager's stored tokensOwed only moves when a position is touched, so a mint
+   that has never been poked reports zero however much it has earned. Simulating the
+   collect gets the real figure: it pokes the pool first, then reports what would come
+   out. It is owner-gated, so these cannot ride the multicall \u2014 msg.sender has to be
+   the wallet, which means one eth_call each with `from` set. */
+const MAX_U128 = (2n ** 128n) - 1n;
+
+async function loadLpFeesOwed(list) {
+  if (!S.account || !list || !list.length) return;
+  await Promise.all(list.map(async p => {
+    try {
+      const data = I.posManager.encodeFunctionData("collect", [{
+        tokenId: p.id, recipient: S.account, amount0Max: MAX_U128, amount1Max: MAX_U128 }]);
+      const raw = await rpcRetry(prov => prov.call({ to: A.posManager, from: S.account, data }));
+      const out = I.posManager.decodeFunctionResult("collect", raw);
+      p.fee0 = out[0]; p.fee1 = out[1];
+    } catch (_) { p.fee0 = null; p.fee1 = null; }
+  }));
 }
 
 function renderLpPositions() {
@@ -4528,16 +4623,75 @@ function renderLpPositions() {
   host.innerHTML = "";
   for (const p of LP.positions) {
     const lo = tickToPrice(p.tickUpper), hi = tickToPrice(p.tickLower);
-    const inRange = cur != null && cur >= p.tickLower && cur < p.tickUpper;
     const empty = !p.liquidity || p.liquidity === 0n;
-    const box = el("div", "run");
+    const inRange = !empty && cur != null && cur >= p.tickLower && cur < p.tickUpper;
+    const below = !empty && cur != null && cur < p.tickLower;   // in ticks; in price, above the band
+    const held = lpHoldings(p, cur);
+
+    /* Where today's price sits across the band, so the state is readable before the
+       words are. Outside the band the marker pins to the edge it left. */
+    const span = p.tickUpper - p.tickLower;
+    const at = cur == null || !span ? 0.5 : Math.min(1, Math.max(0, (cur - p.tickLower) / span));
+    const mark = (1 - at) * 100;   // ticks run opposite to price, so the bar is flipped
+
+    /* "Waiting above" begged the question of what was above. A band holding ETH under
+       today's price is an unfilled buy; one holding FUEL over it is an unfilled sell. */
+    const state = empty ? ["closed", "Closed"]
+      : inRange ? ["live", "Earning fees"]
+      : below ? ["wait", "Waiting to buy"] : ["wait", "Waiting to sell"];
+
+    const box = el("div", "lpcard " + state[0]);
     box.innerHTML =
-      `<div><strong>#${p.id}</strong> \u00b7 ticks ${p.tickLower}\u2013${p.tickUpper}
-         \u00b7 <span class="addr">${plainPrice(lo, 4)} \u2026 ${plainPrice(hi, 4)} ETH per FUEL</span></div>
-       <div class="derived">${empty ? "no liquidity left" : "liquidity " + p.liquidity} \u00b7
-         ${inRange ? "in range, earning fees" : "out of range, earning nothing"}</div>`;
+      `<div class="lpcard-top">
+         <a class="lpcard-id" href="${CHAIN.explorer}/token/${A.posManager}/instance/${p.id}"
+            target="_blank" rel="noopener">#${p.id}</a>
+         <span class="lppill ${state[0]}">${state[1]}</span>
+       </div>
+       <div class="lpcard-holds">${
+         empty ? "<span class=\'lpdimtext\'>Withdrawn \u2014 nothing left in this one.</span>"
+         : [held.eth > 0 ? fmtEth(E.parseEther(held.eth.toFixed(18))) : null,
+            held.fuel > 0 ? fmtTok(E.parseUnits(held.fuel.toFixed(18), 18), S.K.decimals, S.K.symbol) : null]
+             .filter(Boolean).join(" <span class=\'lpplus\'>+</span> ")}</div>
+       ${lpFeeLine(p)}
+       <div class="lpbar" title="${plainPrice(lo, 4)} \u2026 ${plainPrice(hi, 4)} ETH per FUEL">
+         <span class="lpbar-fill"></span>
+         ${empty ? "" : `<span class="lpbar-now" style="left:${mark.toFixed(2)}%"></span>`}
+       </div>
+       <div class="lpcard-range">
+         <span>${plainPrice(lo, 4)}</span>
+         <span class="lpcard-mid">${empty ? "" : inRange ? "price is inside" :
+            below ? "price is above, fills as it falls" : "price is below, fills as it rises"}</span>
+         <span>${plainPrice(hi, 4)}</span>
+       </div>
+       <div class="lpcard-foot">ETH per FUEL \u00b7 ticks ${p.tickLower}\u2013${p.tickUpper}</div>`;
     host.appendChild(box);
   }
+}
+
+/* Fees sit apart from the position itself: they are already yours, waiting to be
+   collected, and are not part of what is still at risk in the band. */
+function lpFeeLine(p) {
+  if (p.fee0 == null || p.fee1 == null) return "";
+  const any = p.fee0 > 0n || p.fee1 > 0n;
+  if (!any) return `<div class="lpfees none">No fees yet</div>`;
+  const bits = [
+    p.fee0 > 0n ? fmtEth(p.fee0) : null,
+    p.fee1 > 0n ? fmtTok(p.fee1, S.K.decimals, S.K.symbol) : null
+  ].filter(Boolean).join(' <span class="lpplus">+</span> ');
+  return `<div class="lpfees"><span class="lpfees-k">Fees earned</span>${bits}</div>`;
+}
+
+/* What a position is actually made of right now. The manager reports liquidity, which
+   is the one number nobody can read, so it is turned back into the two token amounts
+   it stands for at today's price. */
+function lpHoldings(p, cur) {
+  const L = Number(p.liquidity || 0n);
+  if (!L || cur == null) return { eth: 0, fuel: 0 };
+  const sq = t => Math.pow(1.0001, t / 2);
+  const sa = sq(p.tickLower), sb = sq(p.tickUpper), sp = sq(cur);
+  if (cur < p.tickLower) return { eth: L * (1 / sa - 1 / sb) / 1e18, fuel: 0 };
+  if (cur >= p.tickUpper) return { eth: 0, fuel: L * (sb - sa) / 1e18 };
+  return { eth: L * (1 / sp - 1 / sb) / 1e18, fuel: L * (sp - sa) / 1e18 };
 }
 
 /* ---- who has burned $FUEL ----
@@ -5323,10 +5477,23 @@ function on(sel, ev, fn) {
 }
 
 try {
-  $$("nav.tabs button").forEach(b => b.addEventListener("click", () => {
-    $$("nav.tabs button").forEach(x => x.setAttribute("aria-selected", String(x === b)));
-    $$("section.tab").forEach(sec => sec.classList.toggle("on", sec.id === "tab-" + b.dataset.tab));
-  }));
+  /* The tab lives in the URL, the way the $PAMP dashboard does it, so a link can
+     point at one: .../#liquidity opens the liquidity panel directly. Mint is the
+     default and carries no hash, which keeps the bare URL clean. */
+  const TABS = $$("nav.tabs button").map(b => b.dataset.tab);
+  function selectTab(name) {
+    if (!TABS.includes(name)) name = TABS[0];
+    $$("nav.tabs button").forEach(x => x.setAttribute("aria-selected", String(x.dataset.tab === name)));
+    $$("section.tab").forEach(sec => sec.classList.toggle("on", sec.id === "tab-" + name));
+    const want = name === TABS[0] ? "" : "#" + name;
+    if (location.hash !== want && !(name === TABS[0] && !location.hash)) {
+      history.replaceState(null, "", location.pathname + location.search + want);
+    }
+  }
+  $$("nav.tabs button").forEach(b => b.addEventListener("click", () => selectTab(b.dataset.tab)));
+  selectTab(location.hash.slice(1));
+  /* Back, forward, and a pasted link all arrive the same way. */
+  window.addEventListener("hashchange", () => selectTab(location.hash.slice(1)));
 
   on("#btnConnect", "click", connect);
 
