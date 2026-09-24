@@ -1334,6 +1334,24 @@ function toast(msg, kind = "") {
 /* decode a revert into something a person can act on */
 function explain(err) {
   const data = err?.data || err?.info?.error?.data || err?.error?.data;
+  // a plain Error(string) revert: Uniswap's contracts speak in short codes
+  let reason = err?.reason || err?.revert?.args?.[0] || null;
+  if (!reason && typeof data === "string" && data.startsWith("0x08c379a0")) {
+    try { reason = E.AbiCoder.defaultAbiCoder().decode(["string"], "0x" + data.slice(10))[0]; } catch {}
+  }
+  if (reason) {
+    const known = {
+      STF: "The pool could not pull that much FUEL from your wallet — it asked for more than you hold. Use a little less than your full balance.",
+      "Price slippage check": "The price moved more than 3% between the quote and the transaction. Re-quote and try again.",
+      "Transaction too old": "The transaction deadline passed before it landed. Try again.",
+      TLU: "The range's lower tick is above its upper tick. Pick the range again.",
+      TLM: "The lower tick is below what the pool allows.", TUM: "The upper tick is above what the pool allows.",
+      LOK: "The pool is busy with another transaction. Try again in a moment.",
+      "Not approved": "The wallet has not approved this contract to spend the token.",
+      STE: "Sending ETH failed.", "Insufficient WETH9": "Not enough WETH was available for the swap."
+    };
+    return known[reason] || `Reverted: ${reason}.`;
+  }
   if (typeof data === "string" && data.length >= 10) {
     try {
       const d = ALL_ERRORS.parseError(data);
@@ -4681,16 +4699,22 @@ function alignTick(t, up) {
    the near side: below spot when you are adding ETH, above it when you are adding
    FUEL. Ticks run opposite to price here (token0 is WETH), so "below spot in price"
    is "above cur in ticks". */
+/* How far the band has to keep away from today's price. Sitting on the very next tick
+   boundary looked tidy but was a trap: the price only had to drift a fraction of one
+   spacing to land inside the band, and a band containing the price needs both tokens.
+   A one-sided mint sends none of the other one, so the manager works out zero
+   liquidity and the whole transaction reverts. Two spacings is roughly 2-4%. */
+const LP_GAP = 2;
+
 function lpClampSide(range, cur) {
   if (!range || cur == null) return range;
   const floor = alignTick(cur, false);          // the spacing boundary at or under cur
-  const ceil = floor + LP.spacing;              // the first one strictly past it
   if (LP.side === "fuel") {
-    const upper = Math.min(range.upper, floor);
+    const upper = Math.min(range.upper, floor - LP.spacing * (LP_GAP - 1));
     const lower = Math.min(range.lower, upper - LP.spacing);
     return upper > lower ? { lower, upper } : null;
   }
-  const lower = Math.max(range.lower, ceil);
+  const lower = Math.max(range.lower, floor + LP.spacing * LP_GAP);
   const upper = Math.max(range.upper, lower + LP.spacing);
   return upper > lower ? { lower, upper } : null;
 }
@@ -4715,7 +4739,10 @@ function lpSetPresetRange(f) {
   if (cur == null || !lo || !hi) return;
   LP.factor = f;
   const spot = tickToPrice(cur);
-  const near = tickToPrice(LP.side === "fuel" ? alignTick(cur, false) : alignTick(cur, false) + LP.spacing);
+  const floor = alignTick(cur, false);
+  const near = tickToPrice(LP.side === "fuel"
+    ? floor - LP.spacing * (LP_GAP - 1)
+    : floor + LP.spacing * LP_GAP);
   if (LP.side === "fuel") { lo.value = plainPrice(near, 6); hi.value = plainPrice(spot * f, 6); }
   else                    { lo.value = plainPrice(spot / f, 6); hi.value = plainPrice(near, 6); }
 }
@@ -4868,9 +4895,15 @@ function paintLpApprove() {
    "unlimited" threshold meant a wallet that had approved 923M FUEL was still told to
    approve for a position needing a fraction of it. The 2% is the same headroom the
    mint sends, so the figure checked is the figure spent. */
+/* The FUEL to send with a mint: the sized amount plus 2% headroom for a price move
+   between quoting and mining. Capped at the wallet's balance, because a position on
+   the FUEL side pulls the whole desired amount: asking for more than is held makes
+   the manager's transferFrom fail (the pool's "STF" revert), which is exactly what
+   "Max" used to do. */
 function lpFuelNeeded(a) {
   if (!a || !(a.fuel > 0)) return 0n;
-  return E.parseUnits((a.fuel * 1.02).toFixed(18), 18);
+  const want = E.parseUnits((a.fuel * 1.02).toFixed(18), 18);
+  return (S.balance != null && want > S.balance) ? S.balance : want;
 }
 
 function paintLpButton() {
@@ -4922,13 +4955,16 @@ function paintLpPct() {
   if (!S.account) { note.textContent = "Connect a wallet to fill from your balance."; return; }
   if (!bal) { note.textContent = "Could not read your balance."; return; }
   note.textContent = "You hold " + fmtTok(bal.raw, bal.dec, bal.sym) +
-    (LP.side === "eth" ? ". Max leaves a little behind for gas." : ".");
+    (LP.side === "eth" ? ". Max fills 96% and leaves a little behind for gas." : ". Max fills 96% of it.");
 }
 
 function renderLpPct() {
   const host = $("#lpPct");
   if (!host || host.children.length) return;
-  for (const [label, num, den] of [["25%", 1n, 4n], ["50%", 1n, 2n], ["75%", 3n, 4n], ["Max", 1n, 1n]]) {
+  /* "Max" fills 96% of the balance: the mint sends a 2% headroom on the FUEL side, and a
+     little more room keeps a price move between quoting and mining from asking the
+     wallet for more than it holds. */
+  for (const [label, num, den] of [["25%", 1n, 4n], ["50%", 1n, 2n], ["75%", 3n, 4n], ["Max", 24n, 25n]]) {
     const b = el("button", "btn sm fixed", label);
     b.style.flex = "1";
     b.onclick = () => {
@@ -4936,7 +4972,7 @@ function renderLpPct() {
       if (!bal) return;
       let raw = bal.raw * num / den;
       /* Only Max risks leaving nothing behind; a quarter of a balance needs no haircut. */
-      if (LP.side === "eth" && num === den) raw = raw > LP_GAS_RESERVE ? raw - LP_GAS_RESERVE : 0n;
+      if (LP.side === "eth" && label === "Max") raw = raw > LP_GAS_RESERVE ? raw - LP_GAS_RESERVE : 0n;
       const inp = $("#lpEth");
       if (!inp) return;
       /* Trailing zeros on an 18-decimal string make the box unreadable. */
@@ -4961,22 +4997,50 @@ async function doLpApprove() {
 
 async function doAddLiquidity() {
   const a = LP.calc;
-  if (!a || a.eth == null || a.fuel == null) return;
-  const need = lpFuelNeeded(a);
+  /* This used to return without a word, so the button looked alive and pressing it
+     did nothing at all — which is exactly how a stale quote presented itself. */
+  if (!a) { toast("Set a price range first.", "err"); return; }
+
+  /* Between quoting and pressing, the pool moves. Price it again from the live tick
+     before anything is approved or signed: a band that has since swallowed the price
+     needs both tokens, and a one-sided mint carries none of the other, so the manager
+     works out zero liquidity and the transaction reverts. lpReadAmounts reports the
+     two sides but not the band they came from, which renderLp attaches separately. */
+  const freshRange = lpRange();
+  const freshAmts = freshRange ? lpReadAmounts(freshRange) : null;
+  const fresh = freshAmts ? { ...freshAmts, range: freshRange } : null;
+  if (!fresh || fresh.eth == null || fresh.fuel == null) {
+    toast("The price has moved past this range. Pick a range again.", "err");
+    renderLp();
+    return;
+  }
+  /* lpRange clamps to whichever side the chosen token can fill, so a price that has
+     drifted into the band comes back as a band that has been shifted off it. Minting
+     that silently would put the position somewhere the panel never showed, so the
+     move is reported and the quote redrawn instead. */
+  if (a.range && (fresh.range.lower !== a.range.lower || fresh.range.upper !== a.range.upper)) {
+    toast("The price moved, so this range no longer sits where it did. Check the new figures and press again.", "err");
+    renderLp();
+    return;
+  }
+
+  /* Approve against what will actually be sent, not against the older quote. */
+  const need = lpFuelNeeded(fresh);
   if (need > 0n && !(LP.allowance != null && LP.allowance >= need)) { await doLpApprove(); return; }
+
   const signer = await guard();
   LP.busy = true; paintLpButton();
   try {
     /* Whichever side was typed, both are sent: the one named exactly, the other from
        the sizing above with a little headroom. */
-    const eth = a.eth > 0 ? E.parseEther(a.eth.toFixed(18)) : 0n;
+    const eth = fresh.eth > 0 ? E.parseEther(fresh.eth.toFixed(18)) : 0n;
     /* The desired figures are a ceiling, not a spend: the manager pulls only what the
        liquidity needs and refunds the rest, so headroom on the FUEL side absorbs a
        price move between quoting and mining. */
-    const fuelWant = need;   // the very figure the approval was checked against
+    const fuelWant = lpFuelNeeded(fresh);
     const params = {
       token0: A.weth, token1: A.token, fee: LP.fee,
-      tickLower: a.range.lower, tickUpper: a.range.upper,
+      tickLower: fresh.range.lower, tickUpper: fresh.range.upper,
       amount0Desired: eth, amount1Desired: fuelWant,
       amount0Min: eth * 9700n / 10000n,
       amount1Min: fuelWant * 9700n / 10000n,
@@ -5007,7 +5071,8 @@ async function doLpIncrease(id) {
   if (!a || a.eth == null || a.fuel == null) { toast("That amount does not work for this range.", "err"); return; }
 
   const eth = a.eth > 0 ? E.parseEther(a.eth.toFixed(18)) : 0n;
-  const fuel = a.fuel > 0 ? E.parseUnits((a.fuel * 1.02).toFixed(18), 18) : 0n;
+  let fuel = a.fuel > 0 ? E.parseUnits((a.fuel * 1.02).toFixed(18), 18) : 0n;
+  if (S.balance != null && fuel > S.balance) fuel = S.balance;   // never ask for more than is held
   if (eth === 0n && fuel === 0n) { toast("Enter an amount first.", "err"); return; }
 
   /* Same gate as a new position: the approval has to cover what this pulls. */
@@ -6387,6 +6452,17 @@ function tick() {
       renderLpPositions();
     });
     safe("pool fees", () => { loadLpFees().catch(() => {}); });
+  }
+  /* The panel was drawn once and then only when something was typed into it, so the
+     background refresh moved the pool price while "Price now" and the whole quote sat
+     at whatever they were when the panel was last touched. Redraw when the pool's tick
+     actually changes, which leaves the typed range alone and costs nothing otherwise. */
+  if (S.loaded && LP._primed) {
+    const cur = lpCurrentTick();
+    if (cur != null && cur !== LP._lastTick) {
+      LP._lastTick = cur;
+      safe("liquidity price", renderLp);
+    }
   }
   /* A first attempt can lose to an endpoint that refuses the range. Rather than
      leaving the APY blank for the whole session, try a few more times, slowly. */
