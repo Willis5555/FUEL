@@ -4685,11 +4685,23 @@ function paintLpApprove() {
   const needsFuel = LP.calc && LP.calc.fuel > 0;
   box.style.display = (needsFuel && S.account) ? "" : "none";
   if (node) {
+    const need = lpFuelNeeded(LP.calc);
+    const enough = LP.allowance != null && need > 0n && LP.allowance >= need;
     node.textContent = LP.allowance == null ? "approved: reading\u2026"
       : LP.allowance >= (2n ** 128n) ? "approved: unlimited"
       : LP.allowance === 0n ? "approved: nothing yet"
-      : "approved: " + fmtTok(LP.allowance, S.K.decimals, S.K.symbol);
+      : "approved: " + fmtTok(LP.allowance, S.K.decimals, S.K.symbol) +
+        (enough ? " \u2014 enough for this one" : " \u2014 not enough for this one");
   }
+}
+
+/* The approval only has to cover the mint in front of you. Comparing against a fixed
+   "unlimited" threshold meant a wallet that had approved 923M FUEL was still told to
+   approve for a position needing a fraction of it. The 2% is the same headroom the
+   mint sends, so the figure checked is the figure spent. */
+function lpFuelNeeded(a) {
+  if (!a || !(a.fuel > 0)) return 0n;
+  return E.parseUnits((a.fuel * 1.02).toFixed(18), 18);
 }
 
 function paintLpButton() {
@@ -4700,7 +4712,8 @@ function paintLpButton() {
   const a = LP.calc;
   // a side the range cannot use leaves the other one unknowable, so there is nothing to send
   if (!a || a.eth == null || a.fuel == null) { b.textContent = "Add liquidity"; b.disabled = true; return; }
-  if (a.fuel > 0 && LP.allowance != null && LP.allowance < (2n ** 128n)) {
+  const need = lpFuelNeeded(a);
+  if (need > 0n && LP.allowance != null && LP.allowance < need) {
     b.textContent = "Approve " + S.K.symbol; b.disabled = false; return;
   }
   b.textContent = "Add liquidity";
@@ -4780,7 +4793,8 @@ async function doLpApprove() {
 async function doAddLiquidity() {
   const a = LP.calc;
   if (!a || a.eth == null || a.fuel == null) return;
-  if (a.fuel > 0 && !(LP.allowance != null && LP.allowance >= (2n ** 128n))) { await doLpApprove(); return; }
+  const need = lpFuelNeeded(a);
+  if (need > 0n && !(LP.allowance != null && LP.allowance >= need)) { await doLpApprove(); return; }
   const signer = await guard();
   LP.busy = true; paintLpButton();
   try {
@@ -4790,7 +4804,7 @@ async function doAddLiquidity() {
     /* The desired figures are a ceiling, not a spend: the manager pulls only what the
        liquidity needs and refunds the rest, so headroom on the FUEL side absorbs a
        price move between quoting and mining. */
-    const fuelWant = a.fuel > 0 ? E.parseUnits((a.fuel * 1.02).toFixed(18), 18) : 0n;
+    const fuelWant = need;   // the very figure the approval was checked against
     const params = {
       token0: A.weth, token1: A.token, fee: LP.fee,
       tickLower: a.range.lower, tickUpper: a.range.upper,
