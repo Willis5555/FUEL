@@ -1577,6 +1577,29 @@ function renderNotLive() {
   if (b) b.onclick = () => switchNetwork("robinhood");
 }
 
+/* Which endpoints are safe to read from. The only disqualifying answer is a chain id
+   that is not ours: anything else (a rate limit, a timeout, a challenge page) says
+   nothing about which chain sits behind it, so the endpoint stays in the pool as
+   unverified and is preferred last until it proves itself. */
+async function probeEndpoints() {
+  await Promise.all(S.pool.map(async e => {
+    if (e.wrongChain || e.verified) return;
+    try {
+      const id = await Promise.race([
+        e.provider.send("eth_chainId", []),
+        sleep(4000).then(() => Promise.reject(new Error("chain id probe timed out")))
+      ]);
+      if (parseInt(id, 16) === CHAIN.id) { e.ok = true; e.verified = true; e.benchedUntil = 0; }
+      else { e.ok = false; e.wrongChain = true; }     // definite, and permanent
+    } catch (_) {
+      e.ok = true;                                    // usable, just not proven yet
+      e.verified = false;
+      e.benchedUntil = Math.max(e.benchedUntil || 0, Date.now() + 10000);
+    }
+  }));
+  if (!S.pool.some(e => e.ok)) S.pool.forEach(e => { if (!e.wrongChain) e.ok = true; });
+}
+
 async function boot() {
   renderNetSwitch();
   const sw = $("#netsw");
@@ -1614,16 +1637,12 @@ async function boot() {
   // An endpoint quietly serving a different chain would poison every read.
   // On a shorter leash than an ordinary request: this gates the first paint, and
   // an endpoint that cannot answer a trivial call promptly is not one to open with.
-  await Promise.all(S.pool.map(async e => {
-    try {
-      const id = await Promise.race([
-        e.provider.send("eth_chainId", []),
-        sleep(4000).then(() => Promise.reject(new Error("chain id probe timed out")))
-      ]);
-      e.ok = parseInt(id, 16) === CHAIN.id;
-    } catch (_) { e.ok = false; }
-  }));
-  if (!S.pool.some(e => e.ok)) S.pool.forEach(e => { e.ok = true; });   // all unreachable: try anyway
+  await probeEndpoints();
+  /* An endpoint that could not answer the probe is retried in the background rather
+     than written off for the session. Two of the three here fail it routinely — one
+     answers 429, the other a bot-check page — and losing both left every request
+     piling onto the third, which then rate limited in turn. */
+  setInterval(() => { probeEndpoints().catch(() => {}); }, 45000);
 
   startup(0);
 }
@@ -1984,7 +2003,12 @@ async function ensureChain() {
 /* ======================= user data ======================= */
 /* Read every position an address holds. Used for the connected wallet and for
    the lookup, which needs no wallet at all — it is all public state. */
-async function fetchMintsFor(u, barSel) {
+/* opts.lite stops after the first multicall. That one call already carries the
+   balance, the solo mint, the stake and the global rank; what follows is a read per
+   proxy and then a reward quote per live mint, which for a heavy wallet is hundreds
+   of calls. Those are only worth paying for when the positions are actually on
+   screen. */
+async function fetchMintsFor(u, barSel, opts) {
   const head = await mc([
     { to: A.batchMinter, iface: I.batch, fn: "proxiesOf", args: [u] },
     { to: A.token, iface: I.token, fn: "balanceOf", args: [u] },
@@ -2009,6 +2033,11 @@ async function fetchMintsFor(u, barSel) {
   const stake = (st && st[2] && st[2] > 0n)
     ? { term: st[0], maturityTs: st[1], amount: st[2], apy: st[3] }
     : null;
+
+  if (opts && opts.lite) {
+    return { address: u, positions: [], soloMint, stake, balance,
+             rankKnown: gRank != null, proxyCount: count, lite: true };
+  }
 
   // proxy addresses, then the mint stored under each
   // three phases over the same set, so progress is thirds. The caller says where to
@@ -2066,14 +2095,23 @@ async function fetchMintsFor(u, barSel) {
   return { address: u, positions: list, soloMint, stake, balance, rankKnown, proxyCount: count };
 }
 
-async function loadUser() {
+function onPositionsTab() {
+  const sec = $("#tab-positions");
+  return !!sec && sec.classList.contains("on");
+}
+
+async function loadUser(opts) {
   if (!S.account) return;
+  /* Reading every position is the heaviest thing this page does. Unless the tab that
+     shows them is open, stop after the cheap call and fill the rest in when it is. */
+  const lite = (opts && opts.full) ? false : !onPositionsTab();
   const pb = $("#posBar");
   renderProgress(pb, null);
   setBusy(1);
   S.loadingUser = true;
   try {
-  const d = await fetchMintsFor(S.account, "#posBar");
+  const d = await fetchMintsFor(S.account, "#posBar", { lite });
+  S.userLite = !!d.lite;
   S.userData = d;
   S.positions = d.positions;
   S.soloMint = d.soloMint;
@@ -2093,7 +2131,7 @@ async function loadUser() {
   quoteMint();
   const rule = $("#ownStatsRule");
   if (rule) rule.style.display = (d.positions.length || d.soloMint) ? "" : "none";
-  renderWalletStats("#ownStats", (d.positions.length || d.soloMint) ? d : null).catch(() => {});
+  renderWalletStats("#ownStats", (!S.userLite && (d.positions.length || d.soloMint)) ? d : null).catch(() => {});
   } finally {
     S.loadingUser = false;
     hideProgress(pb);
@@ -2496,6 +2534,19 @@ function renderPositions() {
     hideProgress($("#posBar"));
     host.innerHTML = `<div class="empty">Connect a wallet to load your mints.<br>Or paste your address below.</div>`;
     runsHost.innerHTML = "";
+    return;
+  }
+  if (S.userLite) {
+    /* The positions have not been read yet, which is not the same as having none. */
+    const n = S.userData ? Number(S.userData.proxyCount || 0) : 0;
+    host.innerHTML = `<div class="empty">` +
+      (n ? `This wallet has ${n.toLocaleString()} mint${n === 1 ? "" : "s"} to read.`
+         : `No mints found for this wallet.`) +
+      `<br>Reading them is the slowest thing this page does, so it waits until you ask.` +
+      `<br><button class="btn sm" id="btnLoadPositions" style="margin-top:12px">Load my mints</button></div>`;
+    runsHost.innerHTML = "";
+    const b = $("#btnLoadPositions");
+    if (b) b.onclick = () => loadUser({ full: true });
     return;
   }
   if (!S.positions.length && !S.soloMint) {
@@ -3010,6 +3061,22 @@ function isTransient(e) {
    benched briefly rather than retried immediately — the whole point is to send the
    next attempt somewhere else. */
 let rrIndex = 0;
+/* A fixed sit-out treats an endpoint that is briefly busy the same as one that is
+   refusing everything. Each consecutive failure doubles the wait, up to a minute, and
+   a single success clears it — so a rate limited endpoint is tried occasionally
+   rather than on every request, and a healthy one is never held back. */
+function benchEndpoint(entry, baseMs) {
+  if (!entry) return;
+  entry.strikes = (entry.strikes || 0) + 1;
+  const wait = Math.min(60000, baseMs * Math.pow(2, entry.strikes - 1));
+  entry.benchedUntil = Date.now() + wait;
+}
+function endpointOk(entry) {
+  if (!entry) return;
+  entry.strikes = 0;
+  entry.benchedUntil = 0;
+}
+
 function pickEndpoint(forLogs, wantSpan) {
   const now = Date.now();
   let usable = S.pool.filter(e => e.ok && (!forLogs || !e.noLogs));
@@ -3019,8 +3086,21 @@ function pickEndpoint(forLogs, wantSpan) {
     const wide = usable.filter(e => (e.maxLogSpan ?? Infinity) >= wantSpan);
     if (wide.length) usable = wide;
   }
+  usable = usable.filter(e => !e.wrongChain);
+  /* An unproven endpoint is welcome to carry ordinary calls, which is where the load
+     actually is, but not log queries: those are wide, slow and the first thing a
+     struggling endpoint refuses, and one that answers 400 to a wide range drags the
+     whole scan into its retry loop. */
+  if (forLogs) {
+    const proven = usable.filter(e => e.verified);
+    if (proven.length) usable = proven;
+  }
   const healthy = usable.filter(e => e.benchedUntil <= now);
-  const pool = healthy.length ? healthy : (usable.length ? usable : S.pool);
+  /* A proven endpoint is used ahead of one that has not answered the probe yet, so an
+     unverified one only carries load when the proven ones are busy or benched. */
+  const proven = healthy.filter(e => e.verified);
+  const pool = proven.length ? proven
+    : (healthy.length ? healthy : (usable.length ? usable : S.pool.filter(e => !e.wrongChain)));
   // prefer whichever is free soonest, then round robin among equals
   const soonest = Math.min(...pool.map(e => e.nextFreeAt));
   const free = pool.filter(e => e.nextFreeAt <= soonest + 30);
@@ -3045,7 +3125,7 @@ async function rpcLogs(fn, tries = 5) {
     try {
       await pace(entry);
       const out = await fn(entry.provider);
-      entry.benchedUntil = 0;
+      endpointOk(entry);
       return out;
     } catch (e) {
       /* Unlike a plain call, a refused log query usually means *this* endpoint will
@@ -3053,7 +3133,7 @@ async function rpcLogs(fn, tries = 5) {
          the query is wrong. So every failure benches the endpoint and tries the next,
          instead of giving up the way a non-transient error normally would. */
       last = e;
-      entry.benchedUntil = Date.now() + 20000;
+      benchEndpoint(entry, 5000);
       if (i === tries - 1) throw e;
       await sleep(150 * (i + 1));
     }
@@ -3068,12 +3148,12 @@ async function rpcRetry(fn, tries = 5) {
     try {
       await pace(entry);
       const out = await fn(entry.provider);
-      entry.benchedUntil = 0;
+      endpointOk(entry);
       return out;
     } catch (e) {
       last = e;
       if (!isTransient(e)) throw e;
-      entry.benchedUntil = Date.now() + 6000;
+      benchEndpoint(entry, 5000);
       if (i === tries - 1) throw e;
       await sleep(200 * (i + 1));
     }
@@ -3112,6 +3192,7 @@ async function scanLogs(fromBlock, toBlock, addresses, topicsFilter, onProgress)
       out.push(...logs);
       hi = lo - 1;
       fails = 0;
+      endpointOk(entry);
       // Steer the next span by what this one actually returned. Blind growth kept
       // overshooting the result cap, and each overshoot costs a ten-second refusal.
       if (logs.length > LOG_TARGET) {
@@ -3127,7 +3208,7 @@ async function scanLogs(fromBlock, toBlock, addresses, topicsFilter, onProgress)
       if (isTransient(e)) {
         fails++;
         // bench the endpoint that just failed so the retry lands on another one
-        if (entry) entry.benchedUntil = Date.now() + 6000;
+        benchEndpoint(entry, 5000);
         if (fails > 14) return { logs: out, coveredFrom: hi + 1, complete: false, reason: e };
         await sleep(Math.min(4000, 300 * fails));
       } else if (resultLimitHit(e)) {
@@ -3402,7 +3483,10 @@ async function loadStats() {
     while (cursor >= fromBlock && !STATS.abort) {
       const res = await scanLogs(fromBlock, cursor, addresses, [topics], (done, _t, found) => {
         const scanned = toBlock - cursor + done;
-        const pct = Math.min(100, Math.round(scanned / totalBlocks * 100));
+        /* Held at 99 until the scan really is done. Rounding put the bar on 100 with
+           tens of thousands of events still to come, so a full bar said nothing about
+           whether it was safe to stop watching. */
+        const pct = Math.min(99, Math.round(scanned / totalBlocks * 100));
         renderProgress(bar, pct);
         statsSay(`Scanning… ${pct}% · ${(all.length + found).toLocaleString()} events`);
       });
@@ -3425,8 +3509,9 @@ async function loadStats() {
       }
     }
 
-    const spanTxt = d => d < 1.5 ? Math.round(d * 24) + " hours" : d.toFixed(1) + " days";
     const s2 = STATS.series;
+    if (s2 && s2.complete) renderProgress(bar, 100);
+    const spanTxt = d => d < 1.5 ? Math.round(d * 24) + " hours" : d.toFixed(1) + " days";
     statsSay((s2 && s2.complete
         ? `Covering ${spanTxt(days)}${gen > 0 && start <= gen + bucketS ? " — the whole life of the protocol" : ""} at ${bucketH === 24 ? "1-day" : bucketH === 1 ? "hourly" : bucketH + "-hour"} intervals. `
         : `Stopped at ${s2 && s2.short != null ? spanTxt(s2.short) : "a partial window"} of ${spanTxt(days)} — press Reload charts to continue. `) +
@@ -6169,10 +6254,23 @@ try {
       history.replaceState(null, "", location.pathname + location.search + want);
     }
   }
-  $$("nav.tabs button").forEach(b => b.addEventListener("click", () => selectTab(b.dataset.tab)));
+  /* Switching to the positions tab is the moment the heavy read becomes worth doing. */
+  function tabOpened(name) {
+    if (name === "positions" && S.account && S.userLite && !S.loadingUser) {
+      loadUser({ full: true }).catch(() => {});
+    }
+  }
+  $$("nav.tabs button").forEach(b => b.addEventListener("click", () => {
+    selectTab(b.dataset.tab);
+    tabOpened(b.dataset.tab);
+  }));
   selectTab(location.hash.slice(1));
   /* Back, forward, and a pasted link all arrive the same way. */
-  window.addEventListener("hashchange", () => selectTab(location.hash.slice(1)));
+  window.addEventListener("hashchange", () => {
+    const name = location.hash.slice(1);
+    selectTab(name);
+    tabOpened(TABS.includes(name) ? name : TABS[0]);
+  });
 
   on("#btnConnect", "click", connect);
 
