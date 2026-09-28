@@ -746,6 +746,9 @@ header.top .mark .txt{color:var(--neon);text-shadow:0 0 14px rgba(57,255,20,.45)
       <div class="lppos">
         <div class="row" style="align-items:baseline;margin:0 0 8px">
           <h3 style="font-size:11px;margin:0;flex:1">Your positions</h3>
+          <label class="fixed" style="flex:none;color:var(--muted);font-size:13px">
+            <input type="checkbox" id="lpShowClosed" style="width:auto"> Show closed positions
+          </label>
           <button class="btn sm fixed" id="btnLpRefresh" title="Check again" aria-label="Check again">&#8635;</button>
         </div>
         <div id="lpList"></div>
@@ -855,7 +858,7 @@ header.top .mark .txt{color:var(--neon);text-shadow:0 0 14px rgba(57,255,20,.45)
     <div id="inflationHost"></div>
 
     <div class="panel">
-      <h3>Top burners</h3>
+      <h3>Top $FUEL burners</h3>
       <div class="row" style="align-items:flex-start">
         <p class="note" style="flex:1">Which contracts have destroyed the most $FUEL. Read from
           the token's own transfers to the dead address and to zero, then attributed to the
@@ -868,6 +871,23 @@ header.top .mark .txt{color:var(--neon);text-shadow:0 0 14px rgba(57,255,20,.45)
       <div id="burnMsg" class="derived">Not loaded. This reads every burn transfer and then one
         receipt per transaction, so it only runs when you ask.</div>
       <div id="burnList"></div>
+    </div>
+
+    <div class="panel">
+      <h3>Top $MORE burners</h3>
+      <div class="row" style="align-items:flex-start">
+        <p class="note" style="flex:1">Which contracts have destroyed the most $MORE. Read from
+          $MORE's own transfers to the zero address and to the dead address, then credited the same
+          way as the list above, to the protocol contract that did the burning. $MORE's DEX fees
+          buy and burn is its own, funded by the fees its Uniswap pools earn; FUEL's buy and burn is
+          funded by FUEL's fee split. $MORE has only ever been minted once, so none of this comes
+          back.</p>
+        <button class="btn sm fixed" id="btnMburnLoad">Load burners</button>
+      </div>
+      <div id="mburnBar" class="progress" hidden></div>
+      <div id="mburnMsg" class="derived">Not loaded. This reads every $MORE burn transfer and then one
+        receipt per transaction, so it only runs when you ask.</div>
+      <div id="mburnList"></div>
     </div>
 
     <div class="panel">
@@ -5039,16 +5059,16 @@ function paintLpPct() {
   if (!S.account) { note.textContent = "Connect a wallet to fill from your balance."; return; }
   if (!bal) { note.textContent = "Could not read your balance."; return; }
   note.textContent = "You hold " + fmtTok(bal.raw, bal.dec, bal.sym) +
-    (LP.side === "eth" ? ". Max fills 96% and leaves a little behind for gas." : ". Max fills 96% of it.");
+    (LP.side === "eth" ? ". Max fills 99.6% and leaves a little behind for gas." : ". Max fills 99.6% of it.");
 }
 
 function renderLpPct() {
   const host = $("#lpPct");
   if (!host || host.children.length) return;
-  /* "Max" fills 96% of the balance: the mint sends a 2% headroom on the FUEL side, and a
-     little more room keeps a price move between quoting and mining from asking the
-     wallet for more than it holds. */
-  for (const [label, num, den] of [["25%", 1n, 4n], ["50%", 1n, 2n], ["75%", 3n, 4n], ["Max", 24n, 25n]]) {
+  /* "Max" fills 99.6% of the balance. The mint's 2% headroom on the FUEL side would
+     overshoot that, but lpFuelNeeded caps what is sent at the balance, so the wallet is
+     never asked for more than it holds. */
+  for (const [label, num, den] of [["25%", 1n, 4n], ["50%", 1n, 2n], ["75%", 3n, 4n], ["Max", 249n, 250n]]) {
     const b = el("button", "btn sm fixed", label);
     b.style.flex = "1";
     b.onclick = () => {
@@ -5316,9 +5336,19 @@ function renderLpPositions() {
   if (!S.account) { host.innerHTML = `<div class="derived">Connect a wallet to see your positions.</div>`; return; }
   if (LP.positions == null) { host.innerHTML = `<div class="derived">Could not read your positions.</div>`; return; }
   if (!LP.positions.length) { host.innerHTML = `<div class="derived">No positions in this pool yet.</div>`; return; }
+  /* A closed position is an empty NFT with nothing to add to or take out, so it stays
+     out of the way unless asked for. */
+  const showClosed = !!($("#lpShowClosed") && $("#lpShowClosed").checked);
+  const shown = showClosed ? LP.positions : LP.positions.filter(p => p.liquidity && p.liquidity > 0n);
+  const hidden = LP.positions.length - shown.length;
+  if (!shown.length) {
+    host.innerHTML = `<div class="derived">No open positions. ${hidden} closed position${hidden === 1 ? " is" : "s are"} ` +
+      `hidden; tick Show closed positions to see ${hidden === 1 ? "it" : "them"}.</div>`;
+    return;
+  }
   const cur = lpCurrentTick();
   host.innerHTML = "";
-  for (const p of LP.positions) {
+  for (const p of shown) {
     const lo = tickToPrice(p.tickUpper), hi = tickToPrice(p.tickLower);
     const empty = !p.liquidity || p.liquidity === 0n;
     const inRange = !empty && cur != null && cur >= p.tickLower && cur < p.tickUpper;
@@ -5465,14 +5495,10 @@ function lpHoldings(p, cur) {
    transaction called: the holder is whoever happened to own the tokens, which for a
    PAMP entry is the entrant rather than the protocol. */
 const BURN = { busy: false, rows: null, total: 0n, txs: 0, abort: false };
+const MBURN = { busy: false, rows: null, total: 0n, txs: 0, abort: false, perEth: null };
 /* A burner worth less than this is noise -- a test call, a rounding sweep -- and
    crowds out the ones that matter. Dropped from the list, not from the totals. */
 const BURN_MIN_USD = 1;
-function burnUsd(v) {
-  const p = fuelUsdPrice();
-  if (p == null || v == null) return null;          // no price: cannot judge, so keep it
-  return Number(E.formatUnits(v, S.K.decimals ?? 18)) * p;
-}
 const BURN_SINKS = {
   "0x000000000000000000000000000000000000dead": "dead address",
   "0x0000000000000000000000000000000000000000": "zero"
@@ -5487,6 +5513,28 @@ const BURN_NAMES = {
      with its own mark and Telegram rather than FUEL's. */
   "0x316a858567426acd376e242b90ced3742101a58b": { name: "Fuel Forge", mark: "forge" }
 };
+/* Who burns $MORE, each named from what it is on chain. Two different buy and burns
+   feed this list and are kept apart: $MORE's own, paid for by its DEX fees, and FUEL's,
+   paid for by FUEL's fee split. */
+const MORE_BURN_NAMES = {
+  /* $MORE's own. The $MORE token stores this address, and its five 1% Uniswap v4 pools
+     (against GLD, WETH, SPY, SPCX and GOOGL, all on one hook) earn fees in those tokens;
+     a keeper has this swap them into MORE and burn it. Nothing in FUEL points here. No
+     mark: the page carries no $MORE logo, and FUEL's would say it is FUEL's. */
+  "0x8fea00440300bb2d3e9377b995e6f62fe99c1a0c": { name: "$MORE DEX fees buy and burn" },
+  /* FUEL's: the one FeeDistributor.moreBurner() points at, spending the MORE share of
+     FUEL's fee split. */
+  "0x86f11a15e1793e7ce1f4264830d1973e80339a51": { name: "FUEL buy and burn", mark: "fuel" },
+  /* The same contract, same owner, started earlier and since replaced. */
+  "0x7ab578855b3246fc3bfadae69a3a5b433586ecc4": { name: "FUEL buy and burn (earlier)", mark: "fuel" },
+  /* Not FUEL's: a different contract that sells PONS for WETH, buys MORE with it and
+     burns it, paying its caller in PONS. */
+  "0x967cda0bc16f920555c7e2cfe39d4744b59c794a": { name: "PONS buy and burn" },
+  "0x140cd99bc94ab43c735f7839457890c957710483": { name: "PAMP daily auction", mark: "pamp" },
+  /* An auction whose token() is PUMP MORE at 0x3A11...B8EE, not the current one. */
+  "0x416f52c208e5eb5c33bd5a25fe0e4665a92d3010": { name: "PAMP daily auction (earlier)", mark: "pamp" }
+};
+
 const BURN_TG = { fuel: "https://t.me/buymoretoken", pamp: "https://t.me/PAMPMORE",
                   forge: "https://t.me/+82zdpAjhJ-dmNWJh" };
 
@@ -5510,31 +5558,61 @@ function burnMarkSrc(kind) {
 /* Telegram's glyph, inline so the row needs no network fetch. */
 const TG_SVG = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">' +
   '<path fill="currentColor" d="M9.78 15.6l-.33 4.6c.47 0 .68-.2.93-.45l2.23-2.1 4.62 3.35c.85.47 1.45.22 1.67-.78l3.03-14.2c.27-1.24-.45-1.73-1.27-1.42L1.5 9.9c-1.22.47-1.2 1.15-.2 1.45l4.7 1.47 10.9-6.85c.5-.34.97-.15.59.19z"/></svg>';
-function burnSay(m) { const n = $("#burnMsg"); if (n) n.textContent = m; }
+/* Both burner lists run through the same scan and the same renderer; what differs is
+   the token, how it is priced, who it credits and where it draws. cfg defaults to the
+   $FUEL list, so older calls with no argument behave exactly as before. */
+function burnSay(m, cfg) { const n = $((cfg || BURN_CFG.fuel).ids.msg); if (n) n.textContent = m; }
 /* This used to set a --p custom property and a data-pct attribute, neither of which
    .progress reads: the bar is a .fill child sized in JS with a .pct label beside it,
    so the burners bar drew nothing at all. */
-function burnProgress(p) { renderProgress($("#burnBar"), p); }
+function burnProgress(p, cfg) { renderProgress($((cfg || BURN_CFG.fuel).ids.bar), p); }
 
-async function loadBurners() {
-  if (BURN.busy) return;
-  BURN.busy = true; BURN.abort = false;
+/* Dollars per whole $MORE. Nothing else on this page prices MORE, so the figure comes
+   from FUEL's own $MORE burner, which quotes MORE for ETH to set its slippage, with
+   CoinGecko supplying ETH. Read once per scan: close enough to sort out dust and put a
+   rough dollar figure beside each burner, not a price to trade on. */
+function moreUsdPrice() {
+  const per = MBURN.perEth;
+  if (!ETH_USD || !per || per <= 0n) return null;
+  const n = Number(E.formatUnits(per, S.L.moreDecimals ?? 18));
+  const v = n > 0 ? ETH_USD / n : null;
+  return v && isFinite(v) ? v : null;
+}
+
+/* An amount with its dollar figure. fmtTok only prices FUEL, so other tokens get the
+   figure added here from their own price. */
+function burnAmt(cfg, v) {
+  const dec = cfg.dec(), sym = cfg.sym();
+  if (cfg.key === "fuel") return fmtTok(v, dec, sym);
+  const p = cfg.usdPrice();
+  const base = fmtTok(v, dec, sym, false);
+  const usd = p == null ? "" : usdText(Number(E.formatUnits(v, dec)) * p);
+  return usd ? base + " (" + usd + ")" : base;
+}
+
+async function loadBurners(cfg) {
+  cfg = cfg || BURN_CFG.fuel;
+  const st = cfg.state;
+  if (st.busy) return;
+  st.busy = true; st.abort = false;
   paintScanButtons();
   const topic = I.token.getEvent("Transfer").topicHash;
   const pad = a => "0x" + a.toLowerCase().replace(/^0x/, "").padStart(64, "0");
+  const token = cfg.token();
   try {
-    burnSay("Reading burn transfers\u2026");
+    burnSay("Reading burn transfers…", cfg);
     /* The log sweep is one query of unknown length, so the bar says "working"
        rather than inventing a number for it. */
-    burnProgress(null);
+    burnProgress(null, cfg);
     const head = await rpcRetry(p => p.getBlockNumber());
+    if (cfg.before) await cfg.before();
 
     /* The node caps a log query, so a window that is refused is split rather than
        skipped -- a partial scan would understate a burner. */
     const pull = async (from, to, sink) => {
       try {
         return await rpcLogs(p => p.getLogs({
-          address: A.token, topics: [topic, null, pad(sink)], fromBlock: from, toBlock: to }));
+          address: token, topics: [topic, null, pad(sink)], fromBlock: from, toBlock: to }));
       } catch (e) {
         if (to - from < 2 || !/exceed|limit|too many|range/i.test(String(e && e.message))) throw e;
         const mid = Math.floor((from + to) / 2);
@@ -5544,9 +5622,9 @@ async function loadBurners() {
     let logs = [];
     for (const sink of Object.keys(BURN_SINKS)) logs = logs.concat(await pull(0, head, sink));
     if (!logs.length) {
-      BURN.rows = []; BURN.total = 0n; BURN.txs = 0;
-      burnSay("No $FUEL has been burned yet.");
-      renderBurners(); return;
+      st.rows = []; st.total = 0n; st.txs = 0;
+      burnSay("No $" + cfg.sym() + " has been burned yet.", cfg);
+      renderBurners(cfg); return;
     }
 
     /* One receipt per transaction gives both the contract that was called and the
@@ -5558,26 +5636,31 @@ async function loadBurners() {
       byTx.get(k).push(l);
     }
     const hashes = [...byTx.keys()];
-    const stakedTopic = I.token.getEvent("Staked").topicHash;
+    /* Staking on FUEL burns the principal and mints it back on withdraw, so those are
+       not destructions. $MORE has no such mechanism -- it has been minted exactly once. */
+    const stakedTopic = cfg.excludeStaking ? I.token.getEvent("Staked").topicHash : null;
+    const names = cfg.names;
     const by = new Map();
     let done = 0, skipped = 0, skippedV = 0n;
     const LANES = 5;
     let next = 0;
     await Promise.all(Array.from({ length: LANES }, async () => {
-      while (next < hashes.length && !BURN.abort) {
+      while (next < hashes.length && !st.abort) {
         const h = hashes[next++];
         let rec = null;
         try { rec = await rpcRetry(p => p.getTransactionReceipt(h)); } catch (_) {}
         done++;
         if (done % 5 === 0 || done === hashes.length) {
-          burnProgress(done / hashes.length * 100);
-          burnSay(`Reading transactions\u2026 ${done} of ${hashes.length}`);
+          burnProgress(done / hashes.length * 100, cfg);
+          burnSay(`Reading transactions… ${done} of ${hashes.length}`, cfg);
         }
         if (!rec) continue;
-        const staked = (rec.logs || []).some(lg =>
-          String(lg.address).toLowerCase() === A.token.toLowerCase() && lg.topics[0] === stakedTopic);
         const amount = byTx.get(h).reduce((a, l) => a + BigInt(l.data), 0n);
-        if (staked) { skipped++; skippedV += amount; continue; }
+        if (stakedTopic) {
+          const staked = (rec.logs || []).some(lg =>
+            String(lg.address).toLowerCase() === token.toLowerCase() && lg.topics[0] === stakedTopic);
+          if (staked) { skipped++; skippedV += amount; continue; }
+        }
         /* Credit the protocol contract that actually did the burning. rec.to is only
            whatever the sender addressed: for a smart-account wallet (EIP-7702) that is the
            wallet itself, and for a router it is the router, so a PAMP entry made either way
@@ -5585,9 +5668,9 @@ async function loadBurners() {
            we know but a known burner ran inside the transaction, that one gets the credit. */
         const called = rec.to ? String(rec.to).toLowerCase() : null;
         let target = rec.to ? E.getAddress(rec.to) : "(contract creation)";
-        if (!called || !BURN_NAMES[called]) {
+        if (!called || !names[called]) {
           const ran = new Set((rec.logs || []).map(lg => String(lg.address).toLowerCase()));
-          const inside = Object.keys(BURN_NAMES).find(a => ran.has(a));
+          const inside = Object.keys(names).find(a => ran.has(a));
           if (inside) target = E.getAddress(inside);
         }
         const e = by.get(target) || { addr: target, v: 0n, n: 0 };
@@ -5596,39 +5679,53 @@ async function loadBurners() {
       }
     }));
 
-    BURN.rows = [...by.values()].sort((a, b) => (b.v > a.v ? 1 : b.v < a.v ? -1 : 0));
-    BURN.total = BURN.rows.reduce((a, r) => a + r.v, 0n);
-    BURN.txs = hashes.length;
-    BURN.skipped = skipped; BURN.skippedV = skippedV;
-    burnSay("");
-    renderBurners();
+    st.rows = [...by.values()].sort((a, b) => (b.v > a.v ? 1 : b.v < a.v ? -1 : 0));
+    st.total = st.rows.reduce((a, r) => a + r.v, 0n);
+    st.txs = hashes.length;
+    st.skipped = skipped; st.skippedV = skippedV;
+    burnSay("", cfg);
+    renderBurners(cfg);
   } catch (e) {
-    burnSay("Could not read the burns: " + explain(e));
+    burnSay("Could not read the burns: " + explain(e), cfg);
   } finally {
-    BURN.busy = false;
-    hideProgress($("#burnBar"));
+    st.busy = false;
+    hideProgress($(cfg.ids.bar));
     paintScanButtons();
   }
 }
 
-function renderBurners() {
-  const host = $("#burnList");
+function renderBurners(cfg) {
+  cfg = cfg || BURN_CFG.fuel;
+  const st = cfg.state;
+  const host = $(cfg.ids.list);
   if (!host) return;
-  const rows = BURN.rows;
+  const rows = st.rows;
   host.innerHTML = "";
   if (!rows) return;
   if (!rows.length) { host.innerHTML = `<div class="empty">Nothing has been burned yet.</div>`; return; }
 
-  const dec = S.K.decimals ?? 18;
-  const supply = S.L.totalSupply;
+  const dec = cfg.dec();
+  const supply = cfg.supply();
+  const price = cfg.usdPrice();
 
+  /* A list with a floor in tokens (minTokens) cuts by amount; otherwise the cut is by
+     dollars, and a row with no price is kept since it cannot be judged. */
+  const minV = cfg.minTokens != null ? E.parseUnits(String(cfg.minTokens), dec) : null;
+  const cutoff = minV != null
+    ? `${Number(cfg.minTokens).toLocaleString("en", { notation: "compact" })} $${cfg.sym()}`
+    : `$${BURN_MIN_USD}`;
   const keep = [], dust = [];
   for (const r of rows) {
-    const u = burnUsd(r.v);
-    (u != null && u < BURN_MIN_USD ? dust : keep).push(r);
+    let small;
+    if (minV != null) small = r.v < minV;
+    else {
+      const u = price == null ? null : Number(E.formatUnits(r.v, dec)) * price;
+      small = u != null && u < BURN_MIN_USD;
+    }
+    (small ? dust : keep).push(r);
   }
   if (!keep.length) {
-    host.innerHTML = `<div class="empty">Every burner is worth under $${BURN_MIN_USD}.</div>`;
+    host.innerHTML = `<div class="empty">Every burner is under ${cutoff}.</div>`;
     return;
   }
   const dustV = dust.reduce((a, r) => a + r.v, 0n);
@@ -5636,7 +5733,7 @@ function renderBurners() {
 
   keep.forEach((r, i) => {
     const key = r.addr.toLowerCase();
-    const info = BURN_NAMES[key] || null;
+    const info = cfg.names[key] || null;
     const name = info ? info.name : "";
     /* no mark means no mark: an unset one used to fall through to FUEL's pump */
     const src = info && info.mark ? burnMarkSrc(info.mark) : null;
@@ -5647,7 +5744,7 @@ function renderBurners() {
       ? `<a class="tglink" href="${BURN_TG[info.mark]}" target="_blank" rel="noopener"
             title="${name} on Telegram" aria-label="${name} on Telegram">${TG_SVG}</a>`
       : "";
-    const share = BURN.total > 0n ? Number(r.v * 10000n / BURN.total) / 100 : 0;
+    const share = st.total > 0n ? Number(r.v * 10000n / st.total) / 100 : 0;
     const ofSupply = (supply && supply > 0n) ? Number(r.v * 10000n / supply) / 100 : null;
     const box = el("div", "run");
     box.innerHTML =
@@ -5656,7 +5753,7 @@ function renderBurners() {
          <span style="flex:1;min-width:0"><strong>${i + 1}. ${name || "unlabelled contract"}</strong>
            ${tg}
            <span class="addr">${link(r.addr)}</span></span>
-         <strong>${fmtTok(r.v, dec, S.K.symbol)}</strong>
+         <strong>${burnAmt(cfg, r.v)}</strong>
        </div>
        <div class="derived">${share.toFixed(share < 0.01 ? 4 : 2)}% of all burns ·
          ${r.n.toLocaleString()} transaction${r.n === 1 ? "" : "s"}` +
@@ -5666,21 +5763,57 @@ function renderBurners() {
   });
 
   const foot = [];
-  foot.push(`${fmtTok(BURN.total, dec, S.K.symbol)} burned across ` +
-    `${BURN.txs.toLocaleString()} transaction${BURN.txs === 1 ? "" : "s"} by ` +
+  foot.push(`${burnAmt(cfg, st.total)} burned across ` +
+    `${st.txs.toLocaleString()} transaction${st.txs === 1 ? "" : "s"} by ` +
     `${rows.length.toLocaleString()} contract${rows.length === 1 ? "" : "s"}.`);
   if (dust.length) {
     foot.push(`${dust.length.toLocaleString()} contract${dust.length === 1 ? "" : "s"} under ` +
-      `$${BURN_MIN_USD} hidden (${fmtTok(dustV, dec, S.K.symbol)} across ` +
+      `${cutoff} hidden (${burnAmt(cfg, dustV)} across ` +
       `${dustTx.toLocaleString()} transaction${dustTx === 1 ? "" : "s"}), still counted above.`);
   }
-  if (BURN.skipped) {
-    foot.push(`${BURN.skipped.toLocaleString()} staking transaction` +
-      `${BURN.skipped === 1 ? "" : "s"} (${fmtTok(BURN.skippedV, dec, S.K.symbol)}) left out ` +
-      "\u2014 staked tokens are minted back on withdraw, so they are not destroyed.");
+  if (st.skipped) {
+    foot.push(`${st.skipped.toLocaleString()} staking transaction` +
+      `${st.skipped === 1 ? "" : "s"} (${burnAmt(cfg, st.skippedV)}) left out ` +
+      "— staked tokens are minted back on withdraw, so they are not destroyed.");
+  }
+  if (cfg.key === "more" && price != null) {
+    foot.push("Dollar figures price $MORE from the FUEL $MORE burner's own quote, so treat them as rough.");
   }
   host.appendChild(el("div", "derived", foot.join(" ")));
 }
+
+const BURN_CFG = {
+  fuel: {
+    key: "fuel", state: BURN, names: BURN_NAMES, excludeStaking: true,
+    token: () => A.token,
+    dec: () => S.K.decimals ?? 18,
+    sym: () => S.K.symbol || "FUEL",
+    supply: () => S.L.totalSupply,
+    usdPrice: () => fuelUsdPrice(),
+    ids: { list: "#burnList", msg: "#burnMsg", bar: "#burnBar" }
+  },
+  more: {
+    key: "more", state: MBURN, names: MORE_BURN_NAMES, excludeStaking: false,
+    token: () => A.more,
+    dec: () => S.L.moreDecimals ?? 18,
+    sym: () => S.L.moreSymbol || "MORE",
+    supply: () => S.L.moreSupply,
+    usdPrice: () => moreUsdPrice(),
+    /* $MORE is cheap enough that a dollar floor lets a crowd of small burners through;
+       below a million the rows are hidden (still in the totals). */
+    minTokens: 1000000,
+    /* the price is read at the start of each scan, from the burner the protocol uses */
+    before: async () => {
+      try {
+        const b = S.burners && S.burners.more;
+        if (!b || !b.addr) return;
+        const q = await mc([{ to: b.addr, iface: I.moreBurner, fn: "getMoreQuoteForETH", args: [E.parseEther("1")] }]);
+        MBURN.perEth = q[0] ?? null;
+      } catch (_) { /* no price just means no dollar figures and no dust filter */ }
+    },
+    ids: { list: "#mburnList", msg: "#mburnMsg", bar: "#mburnBar" }
+  }
+};
 
 function renderTopHolders() {
   renderInflation();
@@ -6369,6 +6502,8 @@ try {
   });
   on("#btnLpApprove", "click", doLpApprove);
   on("#btnLpRefresh", "click", loadLpPositions);
+  // a filter over positions already read, so it redraws without going back to the chain
+  on("#lpShowClosed", "change", renderLpPositions);
   /* Delegated: the cards are rebuilt on every reload. */
   on("#lpList", "click", e => {
     const open = e.target.closest("[data-lpact]");
@@ -6417,6 +6552,10 @@ try {
   on("#btnBurnLoad", "click", () => {
     if (scanBusy()) { burnSay("Another scan is running. It finishes first, then press this."); return; }
     loadBurners();
+  });
+  on("#btnMburnLoad", "click", () => {
+    if (scanBusy()) { burnSay("Another scan is running. It finishes first, then press this.", BURN_CFG.more); return; }
+    loadBurners(BURN_CFG.more);
   });
   on("#topSort", "change", e => { TOP.sort = e.target.value; renderTopHolders(); });
   // a filter over rows already in hand, so it never restarts the scan
@@ -6480,7 +6619,8 @@ try {
    asked for first keeps the floor; the other declines rather than queueing, so nobody
    is left watching a bar that has not started. */
 function scanBusy() {
-  return STATS.busy ? "charts" : TOP.busy ? "minters" : BURN.busy ? "burners" : null;
+  return STATS.busy ? "charts" : TOP.busy ? "minters" : BURN.busy ? "burners"
+    : MBURN.busy ? "moreburners" : null;
 }
 function paintScanButtons() {
   const who = scanBusy();
@@ -6495,6 +6635,8 @@ function paintScanButtons() {
   set("#btnTopLoad", who === "charts",
     "The history scan is running — it finishes first.");
   set("#btnBurnLoad", who != null && who !== "burners",
+    "Another scan is running. It finishes first.");
+  set("#btnMburnLoad", who != null && who !== "moreburners",
     "Another scan is running. It finishes first.");
   set("#btnInflLoad", who === "charts",
     "The history scan is running — it finishes first.");
