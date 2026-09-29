@@ -616,7 +616,7 @@ header.top .mark .txt{color:var(--neon);text-shadow:0 0 14px rgba(57,255,20,.45)
 
         <div class="quote" id="mintQuote">
           <div class="line"><span>Fee at current gas</span><strong id="qFee">—</strong></div>
-          <div class="line"><span>Sent with buffer</span><strong id="qSend">—</strong></div>
+          <div class="line"><span id="qSendLabel">Sent with buffer</span><strong id="qSend">—</strong></div>
           <div class="line"><span>Projected gross reward</span><strong id="qReward">—</strong></div>
           <div class="line"><span>Starts at index</span><strong id="qIndex">—</strong></div>
           <div style="color:var(--text-dim);margin-top:8px">The reward depends on how much the global rank climbs before you claim, which nobody knows yet. The low end assumes it barely moves; the high end assumes it grows by as much as exists today. It rises with the logarithm of that growth, so it moves slowly.</div>
@@ -926,7 +926,7 @@ header.top .mark .txt{color:var(--neon);text-shadow:0 0 14px rgba(57,255,20,.45)
   </div>
 
   <footer class="foot">
-    UNOFFICIAL front end for $FUEL on Robinhood Chain · <a href="https://fuelmoretokens.com/" target="_blank" rel="noopener">fuelmoretokens.com</a> · Not financial advice.<br>
+    UNOFFICIAL front end for $FUEL on <span id="netName">Robinhood Chain</span> · <a href="https://fuelmoretokens.com/" target="_blank" rel="noopener">fuelmoretokens.com</a> · Not financial advice.<br>
     This dashboard can send transactions when you ask it to. Verify contract addresses yourself before approving anything.
   </footer>
 </div>
@@ -955,6 +955,9 @@ const NETWORKS = {
     ],
     explorer: "https://robin.etherscan.io",
     currency: { name: "Ether", symbol: "ETH", decimals: 18 },
+    coingecko: "ethereum",
+    poolKind: "v3",          // Uniswap V3 pool: the price is slot0
+    burnerKind: "eth",       // burners named in ETH: swapETHForTokenAndBurn, ethUsedForBurns...
     live: true
   },
   pulsechain: {
@@ -962,16 +965,42 @@ const NETWORKS = {
     id: 369, hex: "0x171", name: "PulseChain",
     rpc: "https://rpc.pulsechain.com",
     rpcs: [
-      { url: "https://rpc.pulsechain.com", gap: 120, batch: 20 },
-      { url: "https://pulsechain-rpc.publicnode.com", gap: 120, batch: 10 }
+      /* logSpan: the widest getLogs range each will serve. Neither says so usefully when
+         asked for more -- the official one sends back broken JSON after ten seconds --
+         so the scans are told up front instead of finding out one slow refusal at a time. */
+      { url: "https://rpc.pulsechain.com", gap: 120, batch: 20, logSpan: 500000 },
+      { url: "https://pulsechain-rpc.publicnode.com", gap: 120, batch: 10, logSpan: 50000 }
     ],
     explorer: "https://scan.pulsechain.com",
     currency: { name: "Pulse", symbol: "PLS", decimals: 18 },
-    /* Nothing is deployed here yet. The addresses below stay null until the launch,
-       and the page refuses to read rather than guessing at them \u2014 a wrong address
-       here is a wallet pointed at the wrong contract. */
-    live: false,
-    addrs: null
+    coingecko: "pulsechain",
+    poolKind: "v2",          // PulseX V2 pair: the price is getReserves
+    burnerKind: "pls",       // burners named in PLS: swapPLSForTokenAndBurn, totalPLSUsedForBurns...
+    pinGas: true,            // fee-paying transactions carry their own gas ceiling: see pinnedGas()
+    /* Where the log scans start. The public RPCs will not sweep PulseChain from block
+       zero, and nothing of FUEL's exists before its token was deployed. $MORE is far
+       older, so its burn list starts at its own deployment. */
+    fromBlock: 27652954,     // FUEL token 0x6633...7b45 created
+    moreFromBlock: 15251533, // $MORE 0xbEEf...85D0 created
+    /* Live FUEL on PulseChain (29 Sept): the first set, deployed 27 Sept, which the dev kept after
+       the 28 Sept launch failed. There is no V3 position manager on this chain, so the Liquidity
+       tab is left out. */
+    live: true,
+    addrs: {
+      token:       "0x6633aeDbB64115391238D7ce56D2DFAa2e0c7b45",
+      more:        "0xbEEf3bB9dA340EbdF0f5bae2E85368140d7D85D0",
+      batchMinter: "0xfe466217864CE48Ab32258d631C5005e9f1ff08c",
+      feeDist:     "0xEF4169784Cd9Af824AD4Ad609Cd97F1DF19607ED",
+      vault:       "0x2Ad54B07D56D12bee208a36D1BB8134D5Ea79CFA",
+      buyBurn:     "0xBF8836a8Fd1A1E1091278f69f45EC4EB6d647240",
+      moreBurner:  null,            // resolved on chain from feeDist.moreBurner()
+      moreBurnerExpected: "0xE1D2Ce1d0aCe5Cd52DDa0eC5d73cb2e024123235",
+      pool:        "0x0bB20331f424e59612668f3294A23CAa83CC06ef",   // FUEL/WPLS, PulseX v2
+      morePair:    "0x3D3B080A1Ec1AFc121a27AE4cBad17A14E80f7B5",   // MORE/WPLS, PulseX v2
+      weth:        "0xA1077a294dDE1B09bB078844df40758a5D0f9a27",   // WPLS
+      posManager:  null,
+      multicall:   "0xcA11bde05977b3631167028862bE2a173976CA11"
+    }
   }
 };
 
@@ -1015,11 +1044,23 @@ const A = {
 
 /* The addresses above belong to Robinhood Chain. On any other network they are not
    just wrong, they are dangerous, so they are cleared and replaced by that network's
-   own set. PulseChain has none yet, which is what stops the page loading there. */
+   own set. */
 NETWORKS.robinhood.addrs = Object.assign({}, A);
 if (NET.key !== "robinhood") {
   for (const k of Object.keys(A)) delete A[k];
   Object.assign(A, NET.addrs || {});
+}
+
+/* The native coin, for every figure that used to say ETH outright. */
+const NATIVE = CHAIN.currency.symbol;
+
+/* No position manager, no Liquidity tab: it is built on Uniswap V3 positions, and
+   PulseChain's FUEL trades on a PulseX V2 pair. The button goes before the tab list is
+   read further down; the section stays in the DOM, never shown, so the code that looks
+   up its fields still finds them. */
+if (!A.posManager) {
+  const b = document.querySelector('nav.tabs [data-tab="liquidity"]');
+  if (b) b.remove();
 }
 
 
@@ -1057,6 +1098,31 @@ ABI.pool = [
   "function token1() view returns (address)",
   "function liquidity() view returns (uint128)"
 ];
+
+/* PulseX V2 pairs: FUEL/WPLS and MORE/WPLS on PulseChain. */
+ABI.pair = [
+  "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
+  "function token0() view returns (address)",
+  "function token1() view returns (address)"
+];
+
+/* PulseChain's two burners are a different build from Robinhood's: PLS where Robinhood
+   says ETH, a PulseX V2 pair where Robinhood has a V3 pool, and no quote function or
+   per-slot record. They are not verified, so these names come from the selectors in the
+   deployed bytecode. They join the same interfaces; each network calls its own names. */
+function plsBurnerAbi(swapFn, pairFn) {
+  const view = (name, type) => ({ inputs: [], name, outputs: [{ internalType: type, name: "", type }],
+                                  stateMutability: "view", type: "function" });
+  return [
+    ...["totalPLSUsedForBurns", "dailyAllocation", "maxPriceDriftBps", "INTERVAL_TIME",
+        "INCENTIVE_FEE", "lastBurnedIntervalNumber"].map(n => view(n, "uint256")),
+    view(pairFn, "address"),
+    { inputs: [{ internalType: "uint32", name: "_deadline", type: "uint32" }], name: swapFn,
+      outputs: [], stateMutability: "nonpayable", type: "function" }
+  ];
+}
+ABI.buyBurn.push(...plsBurnerAbi("swapPLSForTokenAndBurn", "pulseXPair"));
+ABI.moreBurner.push(...plsBurnerAbi("swapPLSForMoreAndBurn", "morePlsPair"));
 
 ABI.erc20 = [
   "event Transfer(address indexed from, address indexed to, uint256 value)",
@@ -1162,6 +1228,7 @@ const I = {
   buyBurn:    new E.Interface(ABI.buyBurn),
   moreBurner: new E.Interface(ABI.moreBurner),
   pool:       new E.Interface(ABI.pool),
+  pair:       new E.Interface(ABI.pair),
   posManager: new E.Interface(ABI.posManager),
   mc:         new E.Interface(ABI.multicall),
   erc20:      new E.Interface(ABI.erc20)
@@ -1243,8 +1310,12 @@ function fmtEth(v, dp = 5, usd = true) {
   if (v == null) return "—";
   const s = E.formatEther(v);
   const n = Number(s);
-  if (n === 0) return "0 ETH";
-  const eth = n < 0.00001 ? "<0.00001 ETH" : n.toFixed(dp).replace(/0+$/, "").replace(/\.$/, "") + " ETH";
+  if (n === 0) return "0 " + NATIVE;
+  /* PLS amounts run to hundreds of millions, where five decimals are noise and the
+     digits need grouping to be read at all. */
+  const eth = n < 0.00001 ? "<0.00001 " + NATIVE
+    : n >= 1000 ? n.toLocaleString(undefined, { maximumFractionDigits: 0 }) + " " + NATIVE
+    : n.toFixed(dp).replace(/0+$/, "").replace(/\.$/, "") + " " + NATIVE;
   return usd ? eth + usdSuffix(v) : eth;
 }
 /* Dollar value of an ETH amount, when a price is available. Bare, for somewhere
@@ -1353,6 +1424,8 @@ function toast(msg, kind = "") {
 
 /* decode a revert into something a person can act on */
 function explain(err) {
+  // a wallet prompt closed by hand: ethers calls that reason "rejected", which read as a revert
+  if (err?.code === "ACTION_REJECTED" || err?.code === 4001 || err?.info?.error?.code === 4001) return "Cancelled in the wallet.";
   const data = err?.data || err?.info?.error?.data || err?.error?.data;
   // a plain Error(string) revert: Uniswap's contracts speak in short codes
   let reason = err?.reason || err?.revert?.args?.[0] || null;
@@ -1368,7 +1441,8 @@ function explain(err) {
       TLM: "The lower tick is below what the pool allows.", TUM: "The upper tick is above what the pool allows.",
       LOK: "The pool is busy with another transaction. Try again in a moment.",
       "Not approved": "The wallet has not approved this contract to spend the token.",
-      STE: "Sending ETH failed.", "Insufficient WETH9": "Not enough WETH was available for the swap."
+      STE: "Sending ETH failed.", "Insufficient WETH9": "Not enough WETH was available for the swap.",
+      "CRank: Mint already in progress": "One of those mint slots already holds a running mint. Reload the page and mint again; it starts past your existing mints."
     };
     return known[reason] || `Reverted: ${reason}.`;
   }
@@ -1622,6 +1696,9 @@ async function probeEndpoints() {
 
 async function boot() {
   renderNetSwitch();
+  const nn = $("#netName"); if (nn) nn.textContent = CHAIN.name;
+  const so = document.querySelector('#topSort option[value="spent"]');
+  if (so) so.textContent = `Most ${NATIVE} spent`;
   const sw = $("#netsw");
   if (sw) sw.addEventListener("click", e => {
     const b = e.target.closest("[data-net]");
@@ -1641,7 +1718,7 @@ async function boot() {
     // How wide a getLogs range this endpoint will serve. Discovered rather than
     // configured: they differ by orders of magnitude, and the difference between
     // one request and four hundred is the difference between a second and a minute.
-    maxLogSpan: Infinity
+    maxLogSpan: cfg.logSpan || Infinity
   }));
   S.read = S.pool[0].provider;
 
@@ -1776,8 +1853,26 @@ function priceFromSlot0(sqrtP) {
   return v > 0n ? v : null;
 }
 
+/* The same figure from a V2 pair's reserves: FUEL held per whole unit of the other side.
+   A spot ratio like slot0, so a large trade moves it the same way. */
+function priceFromReserves(res) {
+  if (!S.K.poolOk || !res) return null;
+  const r0 = BigInt(res[0]), r1 = BigInt(res[1]);
+  const fuel = S.K.fuelIsToken0 ? r0 : r1, quote = S.K.fuelIsToken0 ? r1 : r0;
+  if (fuel <= 0n || quote <= 0n) return null;
+  const v = fuel * 10n ** BigInt(S.K.quoteDecimals ?? 18) / quote;
+  return v > 0n ? v : null;
+}
+
 /* ---- live protocol state ---- */
 async function loadLive() {
+  /* The two chains' burners report the same figures under different names. */
+  const PLS = NET.burnerKind === "pls", V2 = NET.poolKind === "v2";
+  const FN = PLS
+    ? { lastN: "lastBurnedIntervalNumber", used: "totalPLSUsedForBurns", daily: "dailyAllocation",
+        fuelSlip: "maxPriceDriftBps", moreSlip: "maxPriceDriftBps", fuelPool: "pulseXPair" }
+    : { lastN: "lastETHBurnIntervalNumber", used: "ethUsedForBurns", daily: "DAILY_ALLOCATION_ETH_BURNING",
+        fuelSlip: "ethToTokenSlippage", moreSlip: "ethToMoreSlippage", fuelPool: "tokenWethPool" };
   const calls = [
     { to: A.token, iface: I.token, fn: "globalRank" },
     { to: A.token, iface: I.token, fn: "activeMinters" },
@@ -1809,30 +1904,41 @@ async function loadLive() {
     { to: A.buyBurn, iface: I.buyBurn, fn: "owner" },
     { to: A.buyBurn, iface: I.buyBurn, fn: "pendingOwner" },
     { to: A.buyBurn, iface: I.buyBurn, fn: "startTimeStamp" },
-    { to: A.buyBurn, iface: I.buyBurn, fn: "lastETHBurnIntervalNumber" },
+    { to: A.buyBurn, iface: I.buyBurn, fn: FN.lastN },
     { to: A.buyBurn, iface: I.buyBurn, fn: "lastBurnedETHIntervalStartTimestamp" },
     { to: A.buyBurn, iface: I.buyBurn, fn: "totalTokenBurnt" },
-    { to: A.buyBurn, iface: I.buyBurn, fn: "ethUsedForBurns" },
-    { to: A.buyBurn, iface: I.buyBurn, fn: "DAILY_ALLOCATION_ETH_BURNING" },
-    { to: A.buyBurn, iface: I.buyBurn, fn: "ethToTokenSlippage" },
+    { to: A.buyBurn, iface: I.buyBurn, fn: FN.used },
+    { to: A.buyBurn, iface: I.buyBurn, fn: FN.daily },
+    { to: A.buyBurn, iface: I.buyBurn, fn: FN.fuelSlip },
     { to: A.buyBurn, iface: I.buyBurn, fn: "liquidityAdded" },
-    { to: A.buyBurn, iface: I.buyBurn, fn: "tokenWethPool" },
+    { to: A.buyBurn, iface: I.buyBurn, fn: FN.fuelPool },
     { to: A.moreBurner, iface: I.moreBurner, fn: "owner" },
     { to: A.moreBurner, iface: I.moreBurner, fn: "pendingOwner" },
     { to: A.moreBurner, iface: I.moreBurner, fn: "startTimeStamp" },
-    { to: A.moreBurner, iface: I.moreBurner, fn: "lastETHBurnIntervalNumber" },
+    { to: A.moreBurner, iface: I.moreBurner, fn: FN.lastN },
     { to: A.moreBurner, iface: I.moreBurner, fn: "lastBurnedETHIntervalStartTimestamp" },
     { to: A.moreBurner, iface: I.moreBurner, fn: "totalMoreBurnt" },
-    { to: A.moreBurner, iface: I.moreBurner, fn: "ethUsedForBurns" },
-    { to: A.moreBurner, iface: I.moreBurner, fn: "DAILY_ALLOCATION_ETH_BURNING" },
-    { to: A.moreBurner, iface: I.moreBurner, fn: "ethToMoreSlippage" },
+    { to: A.moreBurner, iface: I.moreBurner, fn: FN.used },
+    { to: A.moreBurner, iface: I.moreBurner, fn: FN.daily },
+    { to: A.moreBurner, iface: I.moreBurner, fn: FN.moreSlip },
     { to: A.more, iface: I.erc20, fn: "decimals" },
     { to: A.more, iface: I.erc20, fn: "symbol" },
     { to: A.more, iface: I.erc20, fn: "name" },
     { to: A.more, iface: I.erc20, fn: "totalSupply" },
+    /* PulseChain's burner has no quote function: this comes back empty there, and the
+       pair below is the price on its own. */
     { to: A.buyBurn, iface: I.buyBurn, fn: "getTokenQuoteForETH", args: [10n ** 18n] },
-    { to: A.pool, iface: I.pool, fn: "slot0" },
-    { to: A.pool, iface: I.pool, fn: "liquidity" }
+    ...(V2
+      ? [{ to: A.pool, iface: I.pair, fn: "getReserves" }]
+      : [{ to: A.pool, iface: I.pool, fn: "slot0" }, { to: A.pool, iface: I.pool, fn: "liquidity" }]),
+    /* PulseChain's burners state their slot length and the caller's cut, which
+       Robinhood's leave to be derived and to the documentation. */
+    ...(PLS ? [
+      { to: A.buyBurn, iface: I.buyBurn, fn: "INTERVAL_TIME" },
+      { to: A.moreBurner, iface: I.moreBurner, fn: "INTERVAL_TIME" },
+      { to: A.buyBurn, iface: I.buyBurn, fn: "INCENTIVE_FEE" },
+      { to: A.moreBurner, iface: I.moreBurner, fn: "INCENTIVE_FEE" }
+    ] : [])
   ];
 
   const r = await mc(calls);
@@ -1862,24 +1968,36 @@ async function loadLive() {
   L.moreName = r[i++] || null; L.moreSupply = r[i++];
   if (!L.moreSymbol) L.moreSymbol = "MORE";
   L.oracleQuote = r[i++];
-  L.slot0 = r[i++];
-  L.poolLiquidity = r[i++];
+  if (V2) { L.reserves = r[i++]; L.slot0 = null; L.poolLiquidity = null; }
+  else { L.slot0 = r[i++]; L.poolLiquidity = r[i++]; }
+  if (PLS) {
+    fuel.slotLen = r[i++]; more.slotLen = r[i++];
+    fuel.incentive = r[i++]; more.incentive = r[i++];
+    for (const b of [fuel, more]) {
+      // a burner that has never burned reads uint32's maximum here, not slot zero
+      if (b.lastInterval != null && BigInt(b.lastInterval) >= 4294967295n) b.lastInterval = null;
+      // the owner's limit is in basis points, and it bounds price drift, not slippage
+      b.slippage = b.slippage != null ? Number(b.slippage) / 100 : null;
+      b.slipLabel = "Price drift the owner allows";
+    }
+  }
 
   // the pair is the price; the burn contract's TWAP is the backstop
-  const spot = priceFromSlot0(L.slot0 ? L.slot0[0] : null);
+  const spot = V2 ? priceFromReserves(L.reserves) : priceFromSlot0(L.slot0 ? L.slot0[0] : null);
   L.fuelPerEth = spot ?? (L.oracleQuote && L.oracleQuote > 0n ? L.oracleQuote : null);
   L.priceSource = spot ? "pair" : (L.fuelPerEth ? "oracle" : null);
 
   fuel.key = "fuel"; fuel.addr = A.buyBurn; fuel.iface = I.buyBurn; fuel.sym = S.K.symbol;
-  fuel.dec = S.K.decimals; fuel.bal = L.balBuyBurn; fuel.swapFn = "swapETHForTokenAndBurn";
+  fuel.dec = S.K.decimals; fuel.bal = L.balBuyBurn; fuel.swapFn = PLS ? "swapPLSForTokenAndBurn" : "swapETHForTokenAndBurn";
   fuel.quoteFn = "getTokenQuoteForETH"; fuel.dest = "burned";
   more.key = "more"; more.addr = A.moreBurner; more.iface = I.moreBurner; more.sym = L.moreSymbol;
-  more.dec = L.moreDecimals; more.bal = L.balMoreBurner; more.swapFn = "swapETHForMoreAndBurn";
+  more.dec = L.moreDecimals; more.bal = L.balMoreBurner; more.swapFn = PLS ? "swapPLSForMoreAndBurn" : "swapETHForMoreAndBurn";
   more.quoteFn = "getMoreQuoteForETH"; more.dest = "sent to the dead address";
   S.burners = { fuel, more };
 
   // slot length is not exposed — derive it per burner
   for (const b of [fuel, more]) {
+    if (b.slotLen != null && Number(b.slotLen) > 0) { b.slot = Number(b.slotLen); b.slotDerived = false; continue; }
     const st = Number(b.start ?? 0), ln = Number(b.lastInterval ?? 0), ls = Number(b.lastStart ?? 0);
     b.slot = (ln > 0 && ls > st) ? Math.round((ls - st) / ln) : 600;
     b.slotDerived = !(ln > 0 && ls > st);
@@ -1896,7 +2014,9 @@ async function loadLive() {
       if (b.interval != null) wanted.push({ b, call: { to: b.addr, iface: b.iface, fn: "ethIntervalsBurn", args: [b.interval] } });
     }
     if (wanted.length) {
-      const res = await mc(wanted.map(w => w.call));
+      /* PulseChain's burners keep no per-slot record, so there is nothing to ask, and
+         the figure is derived below exactly as it is for an open slot on Robinhood. */
+      const res = PLS ? wanted.map(() => null) : await mc(wanted.map(w => w.call));
       wanted.forEach((w, i) => {
         const b = w.b, r = res[i];
         b.allocated = r ? r[0] : null;
@@ -1925,7 +2045,7 @@ async function loadLive() {
     }
   } catch (_) {}
 
-  try { S.gasPrice = (await rpcRetry(p => p.getFeeData())).gasPrice ?? 0n; } catch (_) {}
+  try { const fd = await rpcRetry(p => p.getFeeData()); S.feeData = fd; S.gasPrice = fd.gasPrice ?? 0n; } catch (_) {}
 
   buildWiring();
   renderAll();
@@ -2141,10 +2261,12 @@ async function loadUser(opts) {
     toast("Could not read the global rank, so reward projections are unavailable. Press reload.", "err");
   }
   renderPositions();
-  renderLpQuick();
-  renderLp();
-  refreshLpAllowance().then(paintLpApprove);
-  loadLpPositions();
+  if (A.posManager) {                 // no Liquidity tab on a chain without V3 positions
+    renderLpQuick();
+    renderLp();
+    refreshLpAllowance().then(paintLpApprove);
+    loadLpPositions();
+  }
   renderMintSide();
   renderStake();
   renderHero();
@@ -2302,7 +2424,7 @@ function renderHeroStats() {
     : `<span class="countdown ready">ready to sweep</span>`;
 
   host.innerHTML =
-    statRow("ETH held across the contracts", fmtEth(f.pooled)) +
+    statRow(`${NATIVE} held across the contracts`, fmtEth(f.pooled)) +
     statRow("Price", f.price, true) +
     statRow("Global rank", f.rank, true) +
     statRow(lenDays ? `${lenDays.toLocaleString()}-day pump fund` : "Pump fund cycle", clock, true);
@@ -2321,7 +2443,7 @@ function renderProtocolStats() {
     bigStat("Global rank", f.rank, "one step per mint opened") +
     bigStat("Total supply", f.supply, `${K.symbol} in existence`) +
     // the tile's headline stays the bare number; its dollar value rides in the caption
-    bigStat("Pooled ETH", fmtEth(f.pooled, 5, false).replace(" ETH", ""),
+    bigStat("Pooled " + NATIVE, fmtEth(f.pooled, 5, false).replace(" " + NATIVE, ""),
       [usdPlain(f.pooled), "burn pools, pump fund, unsplit fees"].filter(Boolean).join(" · ")) +
     bigStat("Max term", maxT != null ? maxT.toLocaleString() + " days" : "—",
       startCeiling && maxT > startCeiling ? `up from ${startCeiling} at launch` : "grows with participation") +
@@ -2426,7 +2548,7 @@ function renderMintSide() {
   $("#mintWallet").innerHTML = S.account
     ? statRow("Your balance", fmtTok(S.balance, S.K.decimals, S.K.symbol), true) +
       statRow("Mints you have opened", String(S.positions.length + (S.soloMint ? 1 : 0)), true) +
-      statRow("Next index", String(S.positions.length ? S.positions[S.positions.length - 1].index + 1 : 0), true)
+      statRow("Next index", String(nextMintIndex()), true)
     : `<div class="empty">Not connected.</div>`;
 
   $("#btnMint").disabled = !S.account;
@@ -2440,20 +2562,28 @@ async function quoteMint() {
   $("#mintUnlock").textContent = "unlock " + fmtDate(chainNow() + Number(term) * Number(S.K.SECONDS_IN_DAY ?? 86400n));
 
   if (!gp) { $("#qFee").textContent = "—"; return; }
+  const pin = pinnedGas(S.feeData);
   const r = await mc([
     { to: A.batchMinter, iface: I.batch, fn: "batchFee", args: [count, gp] },
     { to: A.token, iface: I.token, fn: "getGrossReward",
       args: [2n, S.L.amp ?? 0n, term, eaaArg(S.L.eaar)] },
     { to: A.token, iface: I.token, fn: "getGrossReward",
-      args: [S.L.globalRank > 2n ? S.L.globalRank : 2n, S.L.amp ?? 0n, term, eaaArg(S.L.eaar)] }
+      args: [S.L.globalRank > 2n ? S.L.globalRank : 2n, S.L.amp ?? 0n, term, eaaArg(S.L.eaar)] },
+    ...(pin ? [{ to: A.batchMinter, iface: I.batch, fn: "batchFee", args: [count, pin.cap] }] : [])
   ]);
-  const fee = r[0], floor = r[1], ref = r[2];
+  const fee = r[0], floor = r[1], ref = r[2], sentPinned = pin ? r[3] : null;
   $("#qFee").textContent = fee != null ? fmtEth(fee) : "unavailable";
-  $("#qSend").textContent = fee != null ? fmtEth(fee + fee * FEE_BUFFER_BPS / 10000n) : "—";
+  /* With a gas ceiling the transaction sends the fee at that ceiling and gets the rest
+     back, so the figure is what leaves the wallet up front, not what is kept. */
+  const lbl = $("#qSendLabel");
+  if (lbl) lbl.textContent = pin ? "Sent, surplus refunded" : "Sent with buffer";
+  $("#qSend").textContent = pin
+    ? (sentPinned != null ? fmtEth(sentPinned) : "—")
+    : (fee != null ? fmtEth(fee + fee * FEE_BUFFER_BPS / 10000n) : "—");
   $("#qReward").textContent = (floor != null && ref != null)
     ? `${fmtTok(floor * count * unit(), S.K.decimals, S.K.symbol)} to ${fmtTok(ref * count * unit(), S.K.decimals, S.K.symbol)}`
     : "—";
-  $("#qIndex").textContent = S.account ? String(S.positions.length ? S.positions[S.positions.length - 1].index + 1 : 0) : "connect wallet";
+  $("#qIndex").textContent = S.account ? String(nextMintIndex()) : "connect wallet";
 }
 
 /* Mints opened in one transaction share a term, land on the same second, and take
@@ -2906,15 +3036,18 @@ function renderBurns() {
     const cur = start > 0 && now >= start ? Math.floor((now - start) / slot) : null;
     const nextAt = cur != null ? start + (cur + 1) * slot : null;
     const spent = cur != null && Number(b.lastInterval ?? -1) >= cur;
+    // read from the contract where it says (PulseChain); the documented 1.5% otherwise
+    const cutBps = b.incentive != null ? BigInt(b.incentive) : CALLER_REWARD_BPS;
+    const cutPct = (Number(cutBps) / 100).toFixed(1).replace(/\.0$/, "") + "%";
 
     host.innerHTML =
       statRow("Waiting in the pool", fmtEth(b.bal)) +
       statRow(`Total ${b.sym} removed from supply`, fmtTok(b.burnt, b.dec, b.sym)) +
-      statRow("ETH spent so far", fmtEth(b.ethUsed)) +
+      statRow(`${NATIVE} spent so far`, fmtEth(b.ethUsed)) +
       statRow("Released per day", b.daily != null ? (Number(b.daily) / 100).toFixed(2) + "% of the pool" : "—", true) +
-      statRow("Slippage the owner has set", b.slippage != null ? Number(b.slippage) + "%" : "—", true) +
+      statRow(b.slipLabel || "Slippage the owner has set", b.slippage != null ? Number(b.slippage) + "%" : "—", true) +
       statRow("Slot length", `${Math.round(slot / 60)} min${b.slotDerived ? " (assumed — no burns yet to measure)" : ""}`, true) +
-      statRow("ETH ready to deploy this slot",
+      statRow(`${NATIVE} ready to deploy this slot`,
               b.ready == null ? "—"
                 : fmtEth(b.ready) +
                   (b.slotsPending > 1 ? ` · ${b.slotsPending} slots have built up` : "") +
@@ -2923,8 +3056,8 @@ function renderBurns() {
                     : "")) +
       statRow("Your cut for calling it",
               b.ready != null && b.ready > 0n
-                ? `${fmtEth(b.ready * CALLER_REWARD_BPS / 10000n)} · 1.5%`
-                : "1.5% of the slot", true) +
+                ? `${fmtEth(b.ready * cutBps / 10000n)} · ${cutPct}`
+                : `${cutPct} of the slot`, true) +
       statRow(spent ? "This slot is done, next opens" : "Open now, this slot ends",
               nextAt ? fmtDur(nextAt - now) : "—", true);
 
@@ -2936,7 +3069,9 @@ function renderBurns() {
 
     const note = el("p", "note");
     note.style.marginTop = "10px";
-    note.innerHTML = `Bought ${b.sym} is ${b.dest}. Whoever presses this cannot set the slippage — it is fixed by the contract's owner, currently ${b.slippage != null ? Number(b.slippage) + "%" : "unknown"}. <span class="derived">The 1.5% caller's cut is from the protocol's documentation — no contract exposes it, so it cannot be verified here.</span>`;
+    note.innerHTML = b.incentive != null
+      ? `Bought ${b.sym} is ${b.dest}. Whoever presses this cannot change how far the price may have drifted — the contract's owner sets that, currently ${b.slippage != null ? Number(b.slippage) + "%" : "unknown"}. The ${cutPct} caller's cut is read from the contract.`
+      : `Bought ${b.sym} is ${b.dest}. Whoever presses this cannot set the slippage — it is fixed by the contract's owner, currently ${b.slippage != null ? Number(b.slippage) + "%" : "unknown"}. <span class="derived">The 1.5% caller's cut is from the protocol's documentation — no contract exposes it, so it cannot be verified here.</span>`;
     host.appendChild(note);
   }
 }
@@ -3191,6 +3326,15 @@ async function rpcRetry(fn, tries = 5) {
    sits far enough below that a busy stretch of chain does not trip it. */
 const LOG_TARGET = 6000;
 
+/* The widest range any usable log endpoint is known to serve: configured for endpoints
+   that refuse a wide range slowly or garbled rather than saying so, and learned from the
+   ones that do say so. Infinity when nothing is known, which leaves the steering below
+   exactly as it was. */
+function logSpanCap() {
+  const spans = S.pool.filter(p => p.ok && !p.noLogs && !p.wrongChain).map(p => p.maxLogSpan ?? Infinity);
+  return spans.length ? Math.max(...spans) : Infinity;
+}
+
 async function scanLogs(fromBlock, toBlock, addresses, topicsFilter, onProgress) {
   const out = [];
   const total = toBlock - fromBlock + 1;
@@ -3199,7 +3343,7 @@ async function scanLogs(fromBlock, toBlock, addresses, topicsFilter, onProgress)
   // round trips it never needed, and any endpoint refusing a wide range used to
   // shrink the span for all of them. A sparse scan finishes in a single request;
   // a dense one is steered down to size by what comes back.
-  let span = total, hi = toBlock, fails = 0, entry = null;
+  let span = Math.min(total, logSpanCap()), hi = toBlock, fails = 0, entry = null;
 
   while (hi >= fromBlock) {
     const lo = Math.max(fromBlock, hi - span + 1);
@@ -3217,9 +3361,9 @@ async function scanLogs(fromBlock, toBlock, addresses, topicsFilter, onProgress)
       if (logs.length > LOG_TARGET) {
         span = Math.max(1000, Math.floor(attempted * LOG_TARGET / logs.length));
       } else if (logs.length < LOG_TARGET / 3) {
-        span = Math.min(total, Math.floor(span * 2));
+        span = Math.min(total, logSpanCap(), Math.floor(span * 2));
       } else {
-        span = Math.min(total, Math.floor(span * 1.2));
+        span = Math.min(total, logSpanCap(), Math.floor(span * 1.2));
       }
       onProgress?.(toBlock - hi, total, out.length);
       await sleep(40);
@@ -3919,19 +4063,19 @@ function renderStats() {
     : null;
 
   const charts = [
-    { title: `ETH into the protocol per ${unitWord}`,
+    { title: `${NATIVE} into the protocol per ${unitWord}`,
       sub: `Every fee that arrived that ${unitWord} — mints, claims, and anything sent straight to the fund. ` +
            `Gross arrivals, counted before burns or sweeps spend any of it. ` +
            `<strong>${fmtEth(inflowTotal)}</strong> over the window scanned` +
            (busiest ? `, the busiest ${unitWord} being ${busiestWhen} at ${fmtEth(busiest.v)}` : "") +
            `. Faded bars are ${unitWord}s the window only partly covers, the current one included.`,
       p: days.map(d => ({ t: d.t, v: toEth(d.v), partial: d.partial, usd: usdPlain(d.v) })),
-      color: "#96c99c", bars: true, unit: "ETH", hourly: perHour,
+      color: "#96c99c", bars: true, unit: NATIVE, hourly: perHour,
       fmt: v => v >= 1 ? v.toFixed(2) : v >= 0.01 ? v.toFixed(3) : v.toFixed(4) },
     { title: "Pooled in burn contracts and the fund",
       sub: "Both burn pools, the pump fund, and fees not yet split, as one figure. It rises as mint fees arrive and falls as burns spend it.",
       p: s.edges.map((t, i) => ({ t, v: toEth(s.pooledSeries[i]), usd: usdPlain(s.pooledSeries[i]) })),
-      color: "#96c99c", unit: "ETH",
+      color: "#96c99c", unit: NATIVE,
       fmt: v => v >= 1 ? v.toFixed(3) : v.toFixed(4), zeroFloor: false },
     { title: `${S.K.symbol} in existence`,
       sub: `Total supply as it actually stands, walked back from the ${fmtTok(S.L.totalSupply, S.K.decimals, S.K.symbol)} ` +
@@ -4074,8 +4218,9 @@ async function loadTopHolders() {
     topSay("Looking for wallets that have minted…");
     // From the genesis block, which for this purpose is zero: the batch minter has
     // no logs from before it was deployed, so searching for its start block costs
-    // a binary search over the chain and buys nothing.
-    const fromBlock = 0;
+    // a binary search over the chain and buys nothing. PulseChain's RPCs will not
+    // sweep from zero, so there the network's known start is used instead.
+    const fromBlock = NET.fromBlock || 0;
     const toBlock = await rpcRetry(p => p.getBlockNumber());
 
     const opened = I.batch.getEvent("BatchRankClaimed");
@@ -4662,7 +4807,7 @@ function setLpSide(side) {
 const LPFEE = { busy: false, perDay: null, days: null, swaps: 0, when: 0, tries: 0, lastTry: 0 };
 
 async function loadLpFees() {
-  if (LPFEE.busy) return;
+  if (LPFEE.busy || !A.posManager) return;
   LPFEE.busy = true;
   LPFEE.tries++; LPFEE.lastTry = Date.now();
   try {
@@ -5028,7 +5173,7 @@ function paintLpButton() {
 
 async function refreshLpAllowance() {
   LP.allowance = null;
-  if (!S.account) return;
+  if (!S.account || !A.posManager) return;
   try {
     const r = await mc([{ to: A.token, iface: I.token, fn: "allowance", args: [S.account, A.posManager] }]);
     LP.allowance = r[0] ?? null;
@@ -5280,6 +5425,7 @@ function lpPaintDrawer(id) {
 }
 
 async function loadLpPositions() {
+  if (!A.posManager) return;
   const host = $("#lpList");
   if (!host) return;
   if (!S.account) { LP.positions = null; renderLpPositions(); return; }
@@ -5535,6 +5681,21 @@ const MORE_BURN_NAMES = {
   "0x416f52c208e5eb5c33bd5a25fe0e4665a92d3010": { name: "PAMP daily auction (earlier)", mark: "pamp" }
 };
 
+/* PulseChain's own contracts. Keys are addresses, so the two chains' entries share these
+   maps without meeting. */
+Object.assign(BURN_NAMES, {
+  "0xbf8836a8fd1a1e1091278f69f45ec4eb6d647240": { name: "FUEL buy and burn", mark: "fuel" },
+  "0xfe466217864ce48ab32258d631c5005e9f1ff08c": { name: "BatchMinter", mark: "fuel" },
+  "0xef4169784cd9af824ad4ad609cd97f1df19607ed": { name: "FeeDistributor", mark: "fuel" }
+});
+Object.assign(MORE_BURN_NAMES, {
+  "0xe1d2ce1d0ace5cd52dda0ec5d73cb2e024123235": { name: "FUEL buy and burn", mark: "fuel" },
+  /* Not a contract burning: wallets calling transfer() on $MORE itself with the dead
+     address as recipient (most of it in November 2022), so the transaction's target
+     is the token. */
+  "0xbeef3bb9da340ebdf0f5bae2e85368140d7d85d0": { name: "Wallets sending it to the dead address" }
+});
+
 const BURN_TG = { fuel: "https://t.me/buymoretoken", pamp: "https://t.me/PAMPMORE",
                   forge: "https://t.me/+82zdpAjhJ-dmNWJh" };
 
@@ -5607,20 +5768,22 @@ async function loadBurners(cfg) {
     const head = await rpcRetry(p => p.getBlockNumber());
     if (cfg.before) await cfg.before();
 
-    /* The node caps a log query, so a window that is refused is split rather than
-       skipped -- a partial scan would understate a burner. */
-    const pull = async (from, to, sink) => {
-      try {
-        return await rpcLogs(p => p.getLogs({
-          address: token, topics: [topic, null, pad(sink)], fromBlock: from, toBlock: to }));
-      } catch (e) {
-        if (to - from < 2 || !/exceed|limit|too many|range/i.test(String(e && e.message))) throw e;
-        const mid = Math.floor((from + to) / 2);
-        return (await pull(from, mid, sink)).concat(await pull(mid + 1, to, sink));
-      }
-    };
+    /* The page's adaptive log scan, which sizes its windows to what each endpoint will
+       serve. One that gives out partway is an error, not a short list -- a partial scan
+       would understate a burner. It starts where the token's history does: PulseChain's
+       RPCs will not sweep from block zero. */
+    const from = cfg.fromBlock ? cfg.fromBlock() : 0;
+    const sinks = Object.keys(BURN_SINKS);
     let logs = [];
-    for (const sink of Object.keys(BURN_SINKS)) logs = logs.concat(await pull(0, head, sink));
+    for (let si = 0; si < sinks.length; si++) {
+      const res = await scanLogs(from, head, [token], [topic, null, pad(sinks[si])], (done, total) => {
+        const pct = (si + done / Math.max(1, total)) / sinks.length * 100;
+        burnProgress(pct, cfg);
+        burnSay(`Reading burn transfers\u2026 ${Math.round(pct)}%`, cfg);
+      });
+      if (!res.complete) throw res.reason || new Error("the log scan stopped before reaching the start");
+      logs = logs.concat(res.logs);
+    }
     if (!logs.length) {
       st.rows = []; st.total = 0n; st.txs = 0;
       burnSay("No $" + cfg.sym() + " has been burned yet.", cfg);
@@ -5777,7 +5940,9 @@ function renderBurners(cfg) {
       "— staked tokens are minted back on withdraw, so they are not destroyed.");
   }
   if (cfg.key === "more" && price != null) {
-    foot.push("Dollar figures price $MORE from the FUEL $MORE burner's own quote, so treat them as rough.");
+    foot.push(A.morePair
+      ? "Dollar figures price $MORE from the PulseX MORE/WPLS pair, so treat them as rough."
+      : "Dollar figures price $MORE from the FUEL $MORE burner's own quote, so treat them as rough.");
   }
   host.appendChild(el("div", "derived", foot.join(" ")));
 }
@@ -5785,6 +5950,7 @@ function renderBurners(cfg) {
 const BURN_CFG = {
   fuel: {
     key: "fuel", state: BURN, names: BURN_NAMES, excludeStaking: true,
+    fromBlock: () => NET.fromBlock || 0,
     token: () => A.token,
     dec: () => S.K.decimals ?? 18,
     sym: () => S.K.symbol || "FUEL",
@@ -5794,6 +5960,7 @@ const BURN_CFG = {
   },
   more: {
     key: "more", state: MBURN, names: MORE_BURN_NAMES, excludeStaking: false,
+    fromBlock: () => NET.moreFromBlock || 0,
     token: () => A.more,
     dec: () => S.L.moreDecimals ?? 18,
     sym: () => S.L.moreSymbol || "MORE",
@@ -5801,12 +5968,25 @@ const BURN_CFG = {
     usdPrice: () => moreUsdPrice(),
     /* $MORE is cheap enough that a dollar floor lets a crowd of small burners through;
        below a million the rows are hidden (still in the totals). */
-    minTokens: 1000000,
+    // Robinhood's $MORE has a 1B supply; PulseChain's has 21M, where a million would
+    // hide nearly everything, so there the dollar floor applies instead
+    minTokens: NET.key === "robinhood" ? 1000000 : null,
     /* the price is read at the start of each scan, from the burner the protocol uses */
     before: async () => {
       try {
         const b = S.burners && S.burners.more;
         if (!b || !b.addr) return;
+        if (A.morePair) {
+          /* PulseChain's burner has no quote function: MORE per PLS comes from the pair */
+          const q = await mc([{ to: A.morePair, iface: I.pair, fn: "getReserves" },
+                              { to: A.morePair, iface: I.pair, fn: "token0" }]);
+          const res = q[0], t0 = q[1];
+          if (!res || !t0) return;
+          const moreFirst = String(t0).toLowerCase() === A.more.toLowerCase();
+          const m = BigInt(moreFirst ? res[0] : res[1]), w = BigInt(moreFirst ? res[1] : res[0]);
+          MBURN.perEth = w > 0n ? m * 10n ** 18n / w : null;
+          return;
+        }
         const q = await mc([{ to: b.addr, iface: I.moreBurner, fn: "getMoreQuoteForETH", args: [E.parseEther("1")] }]);
         MBURN.perEth = q[0] ?? null;
       } catch (_) { /* no price just means no dollar figures and no dust filter */ }
@@ -5927,8 +6107,9 @@ async function loadStakeFeed() {
     let hi = head, span = 600000, passes = 0, fails = 0, lowest = head;
 
     // stop as soon as there are enough, rather than covering a fixed window
-    while (logs.length < WANT && passes < 10 && hi > 0) {
-      const lo = Math.max(0, hi - span + 1);
+    const floor = NET.fromBlock || 0;
+    while (logs.length < WANT && passes < 10 && hi > floor) {
+      const lo = Math.max(floor, hi - span + 1);
       try {
         const entry = pickEndpoint(true);
         await pace(entry);
@@ -6035,9 +6216,11 @@ function repaintPrices() {
    figure on the page without its dollar value for the rest of the session. */
 async function fetchEthUsd(retry = 0) {
   try {
-    const r = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd", { cache: "no-store" });
+    // the native coin's price: ETH on Robinhood, PLS on PulseChain (ETH_USD keeps its name)
+    const id = NET.coingecko || "ethereum";
+    const r = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd`, { cache: "no-store" });
     const j = await r.json();
-    const v = Number(j?.ethereum?.usd) || null;
+    const v = Number(j?.[id]?.usd) || null;
     if (v) {
       if (v !== ETH_USD) { ETH_USD = v; repaintPrices(); }
       return v;
@@ -6292,8 +6475,28 @@ async function guard() {
   return S.signer;
 }
 async function liveGas() {
-  try { S.gasPrice = (await rpcRetry(p => p.getFeeData())).gasPrice ?? S.gasPrice; } catch (_) {}
+  try { const fd = await rpcRetry(p => p.getFeeData()); S.feeData = fd; S.gasPrice = fd.gasPrice ?? S.gasPrice; } catch (_) {}
   return S.gasPrice;
+}
+
+/* The mint and claim fees are charged at the gas price the transaction actually pays,
+   with the surplus refunded. Left to the wallet, a price even 12% above the page's quote
+   made the contract revert InsufficientFee with the gas already spent -- and on PulseChain,
+   where the fee is a hundred times the gas cost and wallets bid well over the base fee,
+   that is easy to hit and expensive. So there the transaction carries its own ceiling:
+   maxFeePerGas at twice the base fee, room for the base fee to rise before it lands, and
+   a modest tip. The fee is sent for the ceiling, the contract charges at base fee plus
+   tip, and the difference comes back in the same transaction. Robinhood keeps the old
+   behaviour, where a floor gas price makes the fee all but fixed.
+   ethers builds maxFeePerGas as twice the base fee plus the tip, so the base fee is
+   recovered from it rather than read again. */
+function pinnedGas(fd) {
+  if (!NET.pinGas || !fd || fd.maxFeePerGas == null || fd.maxPriorityFeePerGas == null) return null;
+  const base = (fd.maxFeePerGas - fd.maxPriorityFeePerGas) / 2n;
+  if (base <= 0n) return null;
+  const cap = base * 2n;
+  const tip = fd.maxPriorityFeePerGas <= base ? fd.maxPriorityFeePerGas : base / 4n;
+  return { cap, overrides: { maxFeePerGas: cap, maxPriorityFeePerGas: tip } };
 }
 function withBuffer(v) { return v + v * FEE_BUFFER_BPS / 10000n; }
 
@@ -6313,6 +6516,16 @@ async function send(label, fn) {
   }
 }
 
+/* Where a new batch starts. With every position read, just past the last live mint, so
+   proxies whose mints were claimed off the end get reused. On the lighter read (any tab
+   but Positions) only the proxy count is known, and past it every slot is free. Starting
+   at zero there made batchClaimRank revert "Mint already in progress" for any wallet
+   that had minted before. */
+function nextMintIndex() {
+  if (S.userLite || !S.positions) return Number(S.userData?.proxyCount ?? 0);
+  return S.positions.length ? S.positions[S.positions.length - 1].index + 1 : 0;
+}
+
 async function doMint() {
   const signer = await guard();
   const count = BigInt(clampTerm($("#mintCount").value, 1, Number(S.K.MAX_BATCH ?? 50n)));
@@ -6323,11 +6536,13 @@ async function doMint() {
     toast(`Term adjusted to ${termDays} days — the contract accepts ${minT} to ${maxT}.`);
   }
   const term = BigInt(termDays);
-  const start = BigInt(S.positions.length ? S.positions[S.positions.length - 1].index + 1 : 0);
+  const start = BigInt(nextMintIndex());
   const gp = await liveGas();
+  const pin = pinnedGas(S.feeData);
   const c = new E.Contract(A.batchMinter, ABI.batchMinter, signer);
-  const fee = await c.batchFee(count, gp);
-  await send("Mint", () => c.batchClaimRank(start, count, term, { value: withBuffer(fee) }));
+  const fee = await c.batchFee(count, pin ? pin.cap : gp);
+  await send("Mint", () => c.batchClaimRank(start, count, term,
+    pin ? { value: fee, ...pin.overrides } : { value: withBuffer(fee) }));
 }
 
 async function doClaimRemint(run, anchor) {
@@ -6338,11 +6553,14 @@ async function doClaimRemint(run, anchor) {
   if (term == null) return;
   const signer = await guard();
   const gp = await liveGas();
+  const pin = pinnedGas(S.feeData);
+  const at = pin ? pin.cap : gp;
   const c = new E.Contract(A.batchMinter, ABI.batchMinter, signer);
-  const claimFee = await c.batchClaimFee(BigInt(run.count), gp);
-  const mintFee = await c.batchFee(BigInt(run.count), gp);
+  const claimFee = await c.batchClaimFee(BigInt(run.count), at);
+  const mintFee = await c.batchFee(BigInt(run.count), at);
   await send("Claim and reopen", () =>
-    c.batchClaimAndRemint(BigInt(run.start), BigInt(run.count), BigInt(term), { value: withBuffer(claimFee + mintFee) }));
+    c.batchClaimAndRemint(BigInt(run.start), BigInt(run.count), BigInt(term),
+      pin ? { value: claimFee + mintFee, ...pin.overrides } : { value: withBuffer(claimFee + mintFee) }));
 }
 
 async function doStake() {
@@ -6704,7 +6922,7 @@ function tick() {
   safe("hero", renderHero);
   safe("scan buttons", paintScanButtons);
   safe("unlock timers", refreshSoonTimers);
-  if (S.loaded && !LP._primed) {
+  if (S.loaded && !LP._primed && A.posManager) {
     LP._primed = true;
     safe("liquidity panel", () => {
       renderLpQuick();
