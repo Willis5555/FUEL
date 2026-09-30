@@ -143,20 +143,25 @@ a.btn{display:inline-block;text-decoration:none;cursor:pointer}
    are told apart by colour before the label is read. Pink into purple, the same
    pair the favicon starts from. */
 /* The gradient is on the button always, not only when it is the selected chain:
-   it is PulseChain's identity, not a selection state. Which chain is actually active
-   is carried by brightness instead — full strength when on, dimmed when not. */
-.netbtn[data-net="pulsechain"]{
-  color:#fff;
-  /* the supplied gradient, sampled along its own bottom-left to top-right diagonal */
-  background:linear-gradient(100deg,
-    #FE0002 0%, #F01083 20%, #E11AE7 30%, #B30BF4 40%, #7E01FD 50%,
-    #403FFF 60%, #047AFE 70%, #01ADFF 80%, #00EAFF 100%);
-  text-shadow:0 1px 2px rgba(0,0,0,.45);
+   it is PulseChain's identity, not a selection state. It is a rectangular line around
+   the button rather than a fill: the inside stays the header's own dark, drawn as a
+   padding-box layer over the gradient's border-box one. Which chain is active is
+   carried by brightness — full strength when on, dimmed when not. */
+.netbtn[data-net="pulsechain"],
+.netbtn + .netbtn[data-net="pulsechain"]{
+  color:var(--text-dim);
+  border:1.5px solid transparent;
+  background:
+    linear-gradient(var(--bg), var(--bg)) padding-box,
+    /* the supplied gradient, sampled along its own bottom-left to top-right diagonal */
+    linear-gradient(100deg,
+      #FE0002 0%, #F01083 20%, #E11AE7 30%, #B30BF4 40%, #7E01FD 50%,
+      #403FFF 60%, #047AFE 70%, #01ADFF 80%, #00EAFF 100%) border-box;
   opacity:.62;
-  transition:opacity .12s;
+  transition:opacity .12s,color .12s;
 }
 .netbtn[data-net="pulsechain"]:hover{color:#fff;opacity:.85}
-.netbtn[data-net="pulsechain"].on{opacity:1}
+.netbtn[data-net="pulsechain"].on{color:#fff;opacity:1}
 .netbtn[data-net="pulsechain"] .soon{color:#fff;border-color:rgba(255,255,255,.75)}
 
 .netbtn .soon{
@@ -357,23 +362,27 @@ input[type=range]{width:100%;accent-color:var(--accent-dim)}
 .toast.ok{border-left-color:var(--green)}
 
 
-/* progress bar: an inset track, one gradient-segmented fill, a percentage on top */
-.progress{
-  position:relative;height:22px;padding:2px;margin:14px 0 8px;
-  background:#0d1310;
-  border:2px solid;border-color:#0b120e #4e6355 #4e6355 #0b120e;
+/* progress bar, after Windows 95's: a sunken silver field with a double bevel, forest-green
+   blocks with a gap between each, and the percentage beside it rather than on top.
+   renderProgress fills whole blocks only, the way the original never drew half of one. */
+.progress{display:flex;align-items:center;gap:10px;margin:14px 0 8px}
+.progress .track{
+  position:relative;flex:1;min-width:0;height:24px;padding:2px;overflow:hidden;
+  background:#c0c0c0;
+  border:1px solid;border-color:#808080 #ffffff #ffffff #808080;
+  box-shadow:inset 1px 1px 0 #000000,inset -1px -1px 0 #dfdfdf;
 }
 .progress .fill{
   height:100%;width:0;
-  background:repeating-linear-gradient(90deg,var(--accent) 0 11px,transparent 11px 13px);
-  transition:width .2s linear;
+  background:repeating-linear-gradient(90deg,#228b22 0 9px,transparent 9px 11px);   /* forest green */
 }
 .progress .pct{
-  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  flex:none;min-width:4.5ch;text-align:right;
   font-family:var(--mono);font-size:12px;color:var(--text);
 }
-.progress.busy .fill{width:100%;animation:marquee .8s linear infinite}
-@keyframes marquee{from{background-position:0 0}to{background-position:13px 0}}
+/* no count to show: a short run of blocks hops across the field a block at a time, as the
+   later marquee bars did (renderProgress moves it) */
+.progress.busy .fill{position:absolute;top:2px;bottom:2px;left:0;height:auto;width:66px}
 
 /* A disabled button gets no pointer events of its own, so the hover target has to
    be the wrapper around it. */
@@ -571,8 +580,12 @@ a.brow-logo:hover{border-color:var(--accent-dim)}
 }
 .soonwrap:hover .soontip{display:block}
 .progress[hidden]{display:none}
-.progress.slim{height:10px;margin:0;padding:1px;border-width:0;border-top:1px solid var(--line)}
+/* the thin "working" line under the masthead stays a line in the page's own green */
+.progress.slim{margin:0;gap:0;border-top:1px solid var(--line)}
+.progress.slim .track{height:9px;padding:1px;background:none;border:0;box-shadow:none}
 .progress.slim .fill{background:repeating-linear-gradient(90deg,var(--accent) 0 7px,transparent 7px 9px)}
+.progress.slim.busy .fill{top:1px;bottom:1px;width:100%;transform:none;animation:marquee .8s linear infinite}
+@keyframes marquee{from{background-position:0 0}to{background-position:9px 0}}
 .progress.slim .pct{display:none}
 
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
@@ -961,8 +974,8 @@ header.top .mark .txt{color:var(--neon);text-shadow:0 0 14px rgba(57,255,20,.45)
     <div class="row" style="justify-content:center">
       <a class="btn fixed has-mark" href="https://willis5555.github.io/MOREDASHBOARD/"
          target="_blank" rel="noopener"><img class="btn-mark" src="data:image/png;base64,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" alt="$MORE">STAKING</a>
-      <a class="btn fixed has-mark" href="https://willis5555.github.io/PAMP/"
-         title="$PAMP v2: enter with ETH + $FUEL. Every entry burns $FUEL and buys and burns $MORE in the same transaction. 1,000 daily auctions, no premint, no owner, staking 7–1,000 days."
+      <a class="btn fixed has-mark" href="https://pulsepamp.github.io/369/" data-pamp
+         title="$PAMP on PulseChain: 1,000 daily auctions. Every entry burns $FUEL, pays PLS yield to unclaimed and staked PAMP, and feeds a PAMP buy-and-burn that drips 10% a day."
          target="_blank" rel="noopener"><img src="data:image/png;base64,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" alt="" style="height:20px;width:auto">PAMP DAILY AUCTIONS <span class="newtag">LIVE</span></a>
     </div>
   </div>
@@ -991,13 +1004,19 @@ const NETWORKS = {
     id: 4663, hex: "0x1237", name: "Robinhood Chain",
     rpc: "https://rpc.mainnet.chain.robinhood.com",
     rpcs: [
-      { url: "https://rpc.mainnet.chain.robinhood.com", gap: 120, batch: 50 },
-      { url: "https://robinhood.drpc.org", gap: 90, batch: 3 },
+      /* logSpan: the official RPC serves 10M blocks of logs per query and says so when asked
+         for more. dRPC's free plan refuses every getLogs here, even for 1,000 blocks, so it
+         carries ordinary calls only. */
+      { url: "https://rpc.mainnet.chain.robinhood.com", gap: 120, batch: 50, logSpan: 10000000 },
+      { url: "https://robinhood.drpc.org", gap: 90, batch: 3, noLogs: true },
       { url: "https://robinhoodchain.blockscout.com/api/eth-rpc", gap: 150, batch: 3, noLogs: true }
     ],
     explorer: "https://robin.etherscan.io",
     currency: { name: "Ether", symbol: "ETH", decimals: 18 },
     coingecko: "ethereum",
+    /* Where the log scans start: nothing of FUEL's exists before its token was deployed,
+       and sweeping the 63M blocks before it was most of what the Top Minters scan did. */
+    fromBlock: 63139884,     // FUEL token 0xe60C...67A3 created (first mint 63149207)
     poolKind: "v3",          // Uniswap V3 pool: the price is slot0
     burnerKind: "eth",       // burners named in ETH: swapETHForTokenAndBurn, ethUsedForBurns...
     live: true
@@ -3187,13 +3206,48 @@ function renderProgress(host, pct) {
   const slim = host.id === "globalBar";
   host.hidden = false;
   host.className = "progress" + (slim ? " slim" : "") + (busy ? " busy" : "");
-  if (!host.firstElementChild) host.innerHTML = `<div class="fill"></div><div class="pct"></div>`;
+  if (!host.querySelector(".track")) host.innerHTML = `<div class="track"><div class="fill"></div></div><div class="pct"></div>`;
   const v = busy ? null : Math.min(100, Math.max(0, Math.round(pct)));
-  host.firstElementChild.style.width = busy ? "100%" : v + "%";
-  host.lastElementChild.textContent = busy ? "" : v + "%";
+  host.querySelector(".pct").textContent = busy ? "" : v + "%";
+  if (slim) return;                     // the masthead line keeps its own CSS marquee
+  const st = host._w95 || (host._w95 = { shown: 0, pos: null, timer: null });
+  if (st.busy !== busy) st.pos = null;
+  st.busy = busy; st.v = v;
+  if (!st.timer) st.timer = setInterval(() => w95Tick(host, true), W95_TICK);
+  w95Tick(host, false);                 // repaint now; only the timer adds blocks
+}
+/* Blocks, one at a time, the way Windows 95 drew them: never a slide. With a count, the
+   fill adds a single whole block per tick until it reaches the percentage (a block is 9px
+   of green and a 2px gap, and only 100 reaches the far edge). Without one, a run of six
+   blocks hops across the field a block per tick. One timer per bar; it stops once the
+   fill has caught up, or when the bar is hidden or leaves the page. */
+const W95_BLOCK = 11, W95_TICK = 40, W95_RUN = 6;
+function w95Tick(host, advance) {
+  const st = host._w95;
+  if (!st) return;
+  const stop = () => { clearInterval(st.timer); st.timer = null; };
+  if (!host.isConnected || host.hidden) { stop(); return; }
+  const track = host.querySelector(".track"), fill = host.querySelector(".fill");
+  if (!track || !fill) { stop(); return; }
+  const inner = Math.max(0, track.clientWidth - 4);
+  if (st.busy) {
+    if (st.pos == null || st.pos > inner) st.pos = -W95_RUN * W95_BLOCK;
+    else if (advance) st.pos += W95_BLOCK;
+    fill.style.width = W95_RUN * W95_BLOCK + "px";
+    fill.style.transform = `translateX(${st.pos}px)`;
+    return;
+  }
+  fill.style.transform = "";
+  const max = Math.floor(inner / W95_BLOCK);
+  const target = st.v >= 100 ? max : Math.min(max, Math.floor(inner * st.v / 100 / W95_BLOCK));
+  if (st.shown > target) st.shown = target;      // a new run starting over: drop straight back
+  else if (advance && st.shown < target) st.shown++;
+  fill.style.width = (st.v >= 100 && st.shown >= max ? inner : st.shown * W95_BLOCK) + "px";
+  if (st.shown === target) stop();
 }
 function hideProgress(host) {
   if (!host) return;
+  if (host._w95) { clearInterval(host._w95.timer); host._w95 = null; }
   host.hidden = true;
   host.className = host.id === "globalBar" ? "progress slim" : "progress";
 }
@@ -3368,6 +3422,23 @@ async function rpcRetry(fn, tries = 5) {
    sits far enough below that a busy stretch of chain does not trip it. */
 const LOG_TARGET = 6000;
 
+/* The same scan once per topic, merged. Robinhood's official RPC serves 10M blocks for a
+   query on one event but only 100k for one that ORs two together, so two plain scans
+   finish in a handful of requests where the combined one took over a hundred. What the
+   caller can trust as covered is the least-covered of the scans. */
+async function scanLogsEach(fromBlock, toBlock, addresses, topicSets, onProgress) {
+  const logs = [];
+  let coveredFrom = fromBlock, complete = true, reason = null;
+  for (let k = 0; k < topicSets.length; k++) {
+    const r = await scanLogs(fromBlock, toBlock, addresses, topicSets[k], onProgress
+      ? (done, total, found) => onProgress((k * total + done) / topicSets.length, total, logs.length + found)
+      : null);
+    logs.push(...r.logs);
+    if (!r.complete) { complete = false; coveredFrom = Math.max(coveredFrom, r.coveredFrom); reason = reason || r.reason; }
+  }
+  return { logs, coveredFrom, complete, reason };
+}
+
 /* The widest range any usable log endpoint is known to serve: configured for endpoints
    that refuse a wide range slowly or garbled rather than saying so, and learned from the
    ones that do say so. Infinity when nothing is known, which leaves the steering below
@@ -3421,11 +3492,16 @@ async function scanLogs(fromBlock, toBlock, addresses, topicsFilter, onProgress)
         // slow to arrive, so converging in one step beats halving repeatedly.
         span = Math.max(1000, Math.floor(attempted / 8));
       } else if (rangeTooWide(e)) {
-        // this endpoint's ceiling, not everyone's — remember it and try elsewhere
-        if (entry) entry.maxLogSpan = Math.max(1000, Math.floor(attempted / 2));
+        // this endpoint's ceiling, not everyone's — remember it (exactly, when it names it)
+        // and try elsewhere
+        const said = allowedSpan(e);
+        if (entry) entry.maxLogSpan = Math.max(1000, said != null && said < attempted ? said : Math.floor(attempted / 2));
         const anyWider = S.pool.some(p => p.ok && !p.noLogs && (p.maxLogSpan ?? Infinity) >= attempted);
-        if (!anyWider) span = Math.max(1000, Math.floor(span / 2));
+        if (!anyWider) span = Math.max(1000, Math.min(Math.floor(span / 2), logSpanCap()));
       } else if (span > 1000) {
+        /* An unexplained refusal: sit this endpoint out briefly, so the retry lands on
+           another one instead of the same refusal deciding the window for everyone. */
+        benchEndpoint(entry, 5000);
         span = Math.max(1000, Math.floor(span / 2));
       } else {
         return { logs: out, coveredFrom: hi + 1, complete: false, reason: e };
@@ -3444,13 +3520,27 @@ async function scanLogs(fromBlock, toBlock, addresses, topicsFilter, onProgress)
    A result cap is a property of the data: the range is fine, it just holds more
    logs than the endpoint will return at once. Nothing is learned about the
    endpoint; the span simply has to suit how dense the logs are. */
+/* ethers wraps an endpoint's own words: Robinhood's official RPC saying "only 10000000
+   are allowed ... narrow the block range" arrives as "could not coalesce error", and
+   dRPC's "ranges over 10000 blocks are not supported" as "server response 400". Neither
+   refusal was recognised, so the scan never learned either limit and ping-ponged between
+   them at a 75k-block window. The endpoint's message is dug out of wherever ethers put it. */
+function rpcErrText(e) {
+  return [e?.shortMessage, e?.message, e?.error?.message, e?.info?.error?.message,
+          e?.info?.responseBody, e?.error?.data?.message]
+    .filter(x => typeof x === "string").join(" ").toLowerCase();
+}
 function rangeTooWide(e) {
-  const m = (e?.shortMessage || e?.message || String(e)).toLowerCase();
-  return /ranges over|block range|range is too|range too/.test(m);
+  return /ranges over|block range|range is too|range too|narrow the block range|are allowed for this request/.test(rpcErrText(e));
 }
 function resultLimitHit(e) {
-  const m = (e?.shortMessage || e?.message || String(e)).toLowerCase();
-  return /logs matched|exceeds limit|more than \d+ results|query returned more than|too many results/.test(m);
+  return /logs matched|exceeds limit|more than \d+ results|query returned more than|too many results/.test(rpcErrText(e));
+}
+/* The widest range the endpoint said it will serve, when it says. */
+function allowedSpan(e) {
+  const m = rpcErrText(e).match(/only (\d+) are allowed|ranges over (\d+) blocks|maximum block range:? (\d+)/);
+  const n = m ? Number(m[1] || m[2] || m[3]) : NaN;
+  return n > 0 ? n : null;
 }
 
 /* Blocks carry no timestamp in a log, and fetching one per log would be brutal.
@@ -4258,21 +4348,27 @@ async function loadTopHolders() {
   try {
     topProgress(0);
     topSay("Looking for wallets that have minted…");
-    // From the genesis block, which for this purpose is zero: the batch minter has
-    // no logs from before it was deployed, so searching for its start block costs
-    // a binary search over the chain and buys nothing. PulseChain's RPCs will not
-    // sweep from zero, so there the network's known start is used instead.
+    // From the block FUEL's token was deployed at, which each network states: the batch
+    // minter has no logs before it, and walking the empty chain below it in the windows
+    // the RPCs allow was most of the scan's time.
     const fromBlock = NET.fromBlock || 0;
     const toBlock = await rpcRetry(p => p.getBlockNumber());
 
     const opened = I.batch.getEvent("BatchRankClaimed");
     const reopened = I.batch.getEvent("BatchClaimedAndReminted");
     if (!opened || !reopened) throw new Error("The batch minter ABI is missing its mint events.");
-    const topics = [[opened.topicHash, reopened.topicHash]];
+    // one scan per event: see scanLogsEach
+    const topicSets = [[opened.topicHash], [reopened.topicHash]];
+    // a resumed pass re-reads what an already-finished event scan covered, so logs are counted once
+    const seenLogs = new Set();
 
     /* Phase one: who has ever opened a mint. Resumes on rate limits the same way
        the charts do, so a long scan is interrupted rather than lost. */
     const owners = new Map();
+    // How many mint proxies each wallet has, from the events alone: the highest index a
+    // batch touched, plus one. It is exactly what reading the wallet will walk, so it
+    // weights the progress bar by mints rather than by wallets.
+    const mintsOf = new Map();
     // What each mint cost to open, keyed by its proxy index. BatchRankClaimed
     // carries the fee that was actually paid, so this is the real figure rather
     // than a re-quote at today's gas — and it comes free with a scan already running.
@@ -4281,7 +4377,7 @@ async function loadTopHolders() {
     const totalBlocks = toBlock - fromBlock + 1;
     let scanComplete = false;
     while (cursor >= fromBlock && !TOP.abort) {
-      const res = await scanLogs(fromBlock, cursor, [A.batchMinter], topics, (done) => {
+      const res = await scanLogsEach(fromBlock, cursor, [A.batchMinter], topicSets, (done) => {
         const scanned = toBlock - cursor + done;
         const pct = Math.min(100, Math.round(scanned / totalBlocks * 100));
         // Indeterminate rather than a slice of the bar: finding holders is one
@@ -4291,6 +4387,9 @@ async function loadTopHolders() {
         topSay(`Finding holders… ${pct}% of the chain · ${owners.size} found`);
       });
       for (const lg of res.logs) {
+        const lk = lg.transactionHash + ":" + lg.index;
+        if (seenLogs.has(lk)) continue;
+        seenLogs.add(lk);
         try {
           const pl = I.batch.parseLog(lg);
           const u = pl.args[0];
@@ -4298,6 +4397,7 @@ async function loadTopHolders() {
           const addr = u.toLowerCase();
           const start = Number(pl.args[1] || 0), count = Number(pl.args[2] || 0);
           owners.set(addr, (owners.get(addr) || 0) + count);
+          mintsOf.set(addr, Math.max(mintsOf.get(addr) || 0, start + count));
           // only the opening event carries a fee; a remint has no fee argument
           const fee = lg.topics[0] === opened.topicHash ? pl.args[4] : null;
           if (fee != null && count > 0) {
@@ -4334,6 +4434,20 @@ async function loadTopHolders() {
     TOP.total = list.length;
     const rows = [];
     let done = 0, next = 0;
+    /* Progress by mints, not wallets: one wallet here holds hundreds and most hold a
+       handful, so a count of wallets jumped and then sat still. Wallets in flight count
+       for the share of their own read they have reported. */
+    const mintsTotal = list.reduce((a, x) => a + (mintsOf.get(x) || 0), 0);
+    let mintsDone = 0;
+    const sayMints = () => {
+      let m = mintsDone;
+      for (const [a, p] of TOP.inflight) m += (mintsOf.get(a) || 0) * (p || 0) / 100;
+      const pct = mintsTotal > 0 ? m / mintsTotal * 100 : done / Math.max(1, list.length) * 100;
+      topProgress(pct);
+      topSay(mintsTotal > 0
+        ? `Reading positions… ${Math.floor(m).toLocaleString()} of ${mintsTotal.toLocaleString()} mints · ${done} of ${list.length} wallets`
+        : `Reading positions… ${done} of ${list.length} wallets`);
+    };
 
     const readOne = async (addr) => {
       TOP.inflight.set(addr, 0);
@@ -4342,6 +4456,7 @@ async function loadTopHolders() {
         const d = await fetchMintsFor(addr, pct => {
           TOP.inflight.set(addr, pct);
           renderInflight();
+          sayMints();
         });
         const f = pendingFuel(d);
         if (f.all.length) {
@@ -4370,9 +4485,9 @@ async function loadTopHolders() {
       TOP.inflight.delete(addr);
       renderInflight();
       done++;
+      mintsDone += mintsOf.get(addr) || 0;
       TOP.scanned = done;
-      topProgress(Math.round(done / list.length * 100));
-      topSay(`Reading positions… ${done} of ${list.length} wallets`);
+      sayMints();
       rows.sort((a, b) => (b.pending > a.pending ? 1 : b.pending < a.pending ? -1 : 0));
       TOP.rows = rows.slice();
       renderTopHolders();
@@ -4380,8 +4495,7 @@ async function loadTopHolders() {
 
     // said before the first read starts, not after it finishes — the biggest wallet
     // goes first and takes the longest, which otherwise looks like a stall
-    topSay(`Reading positions… 0 of ${list.length} wallets`);
-    topProgress(0);
+    sayMints();
 
     /* A few wallets in flight at once. Each one is mostly waiting on a round trip,
        and the endpoint pool paces itself, so overlapping them fills the gaps
@@ -4444,7 +4558,7 @@ const holderBatches = new Map();
    can start it and both have to show it running. The bar is mirrored rather than
    duplicated -- one scan, two readouts. */
 const TOP_BARS = ["#topBar", "#inflBar"];
-function topProgress(pct) { for (const sel of TOP_BARS) renderProgress($(sel), pct); }
+function topProgress(pct) { TOP.pct = pct; for (const sel of TOP_BARS) renderProgress($(sel), pct); }
 function topHideProgress() { for (const sel of TOP_BARS) hideProgress($(sel)); }
 
 /* Which slice of the schedule the chart covers. "all" runs to the last maturity;
@@ -4682,7 +4796,9 @@ function renderInflation() {
         <div id="inflBar" class="progress"></div>
         <div id="inflMsg" class="derived">Reading\u2026</div>
       </div>`;
-    topProgress(0);
+    /* only the bar just built, at wherever the scan has got to: resetting both through
+       topProgress(0) knocked the Top Minters bar back to empty mid-scan */
+    renderProgress($("#inflBar"), TOP.pct ?? 0);
     return;
   }
 
@@ -5756,7 +5872,7 @@ const BURN_MARK_DATA = {
 function burnMarkSrc(kind) {
   if (BURN_MARK_DATA[kind]) return BURN_MARK_DATA[kind];
   const n = kind === "pamp"
-    ? document.querySelector('a[href*="willis5555.github.io/PAMP"] img')
+    ? document.querySelector('a[data-pamp] img')   // the footer's PAMP button, whichever site it links
     : document.querySelector(".mark img");
   return n && n.src ? n.src : null;
 }
@@ -6004,6 +6120,8 @@ const BURN_CFG = {
   fuel: {
     key: "fuel", state: BURN, names: BURN_NAMES, excludeStaking: true,
     fromBlock: () => NET.fromBlock || 0,
+    // a burner under a million FUEL is left off the list (still counted in the totals)
+    minTokens: 1000000,
     token: () => A.token,
     dec: () => S.K.decimals ?? 18,
     sym: () => S.K.symbol || "FUEL",
