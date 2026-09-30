@@ -515,6 +515,48 @@ input[type=range]{width:100%;accent-color:var(--accent-dim)}
 }
 .tglink:hover{color:var(--green);border-color:var(--green);background:#ffffff0d}
 
+/* One burner: rank, logo, who, how much; then its share of all burns as a bar and the
+   figures behind it. A grid rather than .row, whose flex:1 on every child split the
+   line into equal thirds and floated the amounts mid-row. */
+.brow{
+  display:grid;grid-template-columns:30px 40px minmax(0,1fr) auto;
+  column-gap:14px;row-gap:6px;align-items:center;
+  padding:14px 0;border-top:1px solid var(--line);font-family:var(--sans)
+}
+.brow:first-child{border-top:0;padding-top:4px}
+.brow-rank{font-family:var(--mono);font-size:13px;color:var(--dim);text-align:right}
+.brow.top .brow-rank{color:var(--accent)}
+.brow-logo{
+  width:40px;height:40px;display:flex;align-items:center;justify-content:center;
+  border:1px solid var(--line);background:var(--bg)
+}
+a.brow-logo:hover{border-color:var(--accent-dim)}
+.brow-logo .burnmark{width:30px;height:30px;flex:none}
+.brow-logo .burnmark-none{width:18px;height:18px}
+.brow-who{min-width:0}
+.brow-name{font-size:15px;color:var(--text);line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.brow-name.unknown{color:var(--dim);font-style:italic}
+.brow-sub{display:flex;align-items:center;gap:8px;margin-top:4px;font-size:12px;color:var(--dim)}
+.brow-sub .tglink{margin-left:0;vertical-align:0;width:20px;height:20px}
+.brow-sub .tglink svg{width:13px;height:13px}
+.brow-amt{text-align:right;white-space:nowrap}
+.brow-amt .tok{display:block;font-family:var(--serif);font-size:17px;color:var(--accent);line-height:1.2}
+.brow-amt .usd{display:block;font-size:12px;color:var(--dim);margin-top:2px}
+.brow-bar{grid-column:3 / 5;height:4px;background:var(--panel-2);border:1px solid var(--line);position:relative;overflow:hidden}
+.brow-bar > span{position:absolute;left:0;top:0;bottom:0;background:var(--accent-dim)}
+.brow.top .brow-bar > span{background:var(--accent)}
+.brow-meta{grid-column:3 / 5;font-size:11.5px;color:var(--dim);line-height:1.5}
+.brow-meta b{font-weight:500;color:var(--text-dim)}
+.burnfoot{margin-top:6px;padding-top:12px;border-top:1px dashed var(--line)}
+@media (max-width:560px){
+  .brow{grid-template-columns:22px 34px minmax(0,1fr);column-gap:10px}
+  .brow-logo{width:34px;height:34px}
+  .brow-logo .burnmark{width:26px;height:26px}
+  .brow-amt{grid-column:3 / 4;text-align:left}
+  .brow-amt .tok,.brow-amt .usd{display:inline;margin:0 8px 0 0}
+  .brow-bar,.brow-meta{grid-column:3 / 4}
+}
+
 .soonwrap{position:relative;display:inline-block}
 .soonwrap button:disabled{opacity:.45;cursor:not-allowed}
 .soontip{
@@ -5686,7 +5728,10 @@ const MORE_BURN_NAMES = {
 Object.assign(BURN_NAMES, {
   "0xbf8836a8fd1a1e1091278f69f45ec4eb6d647240": { name: "FUEL buy and burn", mark: "fuel" },
   "0xfe466217864ce48ab32258d631c5005e9f1ff08c": { name: "BatchMinter", mark: "fuel" },
-  "0xef4169784cd9af824ad4ad609cd97f1df19607ed": { name: "FeeDistributor", mark: "fuel" }
+  "0xef4169784cd9af824ad4ad609cd97f1df19607ed": { name: "FeeDistributor", mark: "fuel" },
+  /* $PAMP's PulseChain auction: every entry burns FUEL. Same Telegram as the Robinhood one;
+     its logo opens the PulseChain PAMP site. */
+  "0x0cb79f2123da9fba7ee8fcad12206c959525eb72": { name: "PAMP daily auction", mark: "pamp", site: "https://pulsepamp.github.io/369/" }
 });
 Object.assign(MORE_BURN_NAMES, {
   "0xe1d2ce1d0ace5cd52dda0ec5d73cb2e024123235": { name: "FUEL buy and burn", mark: "fuel" },
@@ -5900,27 +5945,35 @@ function renderBurners(cfg) {
     const name = info ? info.name : "";
     /* no mark means no mark: an unset one used to fall through to FUEL's pump */
     const src = info && info.mark ? burnMarkSrc(info.mark) : null;
-    const logo = src
+    const img = src
       ? `<img class="burnmark" src="${src}" alt="">`
       : `<span class="burnmark burnmark-none" aria-hidden="true"></span>`;
+    // a burner with its own site: the logo opens it
+    const logo = src && info.site
+      ? `<a class="brow-logo" href="${info.site}" target="_blank" rel="noopener" title="${name}" aria-label="${name}">${img}</a>`
+      : `<span class="brow-logo">${img}</span>`;
     const tg = info && BURN_TG[info.mark]
       ? `<a class="tglink" href="${BURN_TG[info.mark]}" target="_blank" rel="noopener"
             title="${name} on Telegram" aria-label="${name} on Telegram">${TG_SVG}</a>`
       : "";
     const share = st.total > 0n ? Number(r.v * 10000n / st.total) / 100 : 0;
     const ofSupply = (supply && supply > 0n) ? Number(r.v * 10000n / supply) / 100 : null;
-    const box = el("div", "run");
+    const pct = v => v.toFixed(v < 0.01 ? 4 : 2) + "%";
+    // the amount and its dollar value on separate lines, so the column reads down cleanly
+    const tok = fmtTok(r.v, dec, cfg.sym(), false);
+    const usd = price != null ? usdText(Number(E.formatUnits(r.v, dec)) * price) : "";
+    const box = el("div", "brow" + (i === 0 ? " top" : ""));
     box.innerHTML =
-      `<div class="row" style="align-items:center">
-         ${logo}
-         <span style="flex:1;min-width:0"><strong>${i + 1}. ${name || "unlabelled contract"}</strong>
-           ${tg}
-           <span class="addr">${link(r.addr)}</span></span>
-         <strong>${burnAmt(cfg, r.v)}</strong>
+      `<span class="brow-rank">#${i + 1}</span>
+       ${logo}
+       <div class="brow-who">
+         <div class="brow-name${name ? "" : " unknown"}">${name || "Unlabelled contract"}</div>
+         <div class="brow-sub">${link(r.addr)}${tg}</div>
        </div>
-       <div class="derived">${share.toFixed(share < 0.01 ? 4 : 2)}% of all burns ·
-         ${r.n.toLocaleString()} transaction${r.n === 1 ? "" : "s"}` +
-      (ofSupply != null ? ` · ${ofSupply.toFixed(ofSupply < 0.01 ? 4 : 2)}% of today's supply` : "") +
+       <div class="brow-amt"><span class="tok">${tok}</span>${usd ? `<span class="usd">${usd}</span>` : ""}</div>
+       <div class="brow-bar" aria-hidden="true"><span style="width:${Math.max(share, 0.5).toFixed(2)}%"></span></div>
+       <div class="brow-meta"><b>${pct(share)}</b> of all burns · ${r.n.toLocaleString()} transaction${r.n === 1 ? "" : "s"}` +
+      (ofSupply != null ? ` · <b>${pct(ofSupply)}</b> of today's supply` : "") +
       `</div>`;
     host.appendChild(box);
   });
@@ -5944,7 +5997,7 @@ function renderBurners(cfg) {
       ? "Dollar figures price $MORE from the PulseX MORE/WPLS pair, so treat them as rough."
       : "Dollar figures price $MORE from the FUEL $MORE burner's own quote, so treat them as rough.");
   }
-  host.appendChild(el("div", "derived", foot.join(" ")));
+  host.appendChild(el("div", "derived burnfoot", foot.join(" ")));
 }
 
 const BURN_CFG = {
