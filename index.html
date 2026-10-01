@@ -3672,7 +3672,21 @@ function buildSeries(logs, coveredFrom, ctx) {
 
   // burns are already counted per bucket for the burn chart; they cut supply too
   for (let i = 0; i < nb; i++) supplyFlow[i] -= fuelBurnFlow[i];
-  const supplySeries = backFrom(S.L.totalSupply, supplyFlow);
+  /* FUEL sent to the dead address leaves circulation though totalSupply keeps it: each
+     transfer cuts its bucket, and the line is anchored on totalSupply less what the dead
+     address holds now. Only transfers inside what the main scan has covered count, so a
+     partial draw stays consistent with itself. */
+  const deadCounted = ctx.deadLogs != null && ctx.deadNow != null;
+  if (deadCounted) {
+    for (const lg of ctx.deadLogs) {
+      if (lg.blockNumber < coveredFrom) continue;
+      const t = tsOf(lg.blockNumber);
+      if (t == null || t < edges[0] - bucketS) continue;
+      try { supplyFlow[idxOf(t)] -= BigInt(lg.data); } catch (_) {}
+    }
+  }
+  const supplyNow = S.L.totalSupply != null && deadCounted ? S.L.totalSupply - ctx.deadNow : S.L.totalSupply;
+  const supplySeries = backFrom(supplyNow, supplyFlow);
 
   const currentTotal = [S.L.balFeeDist, S.L.balVault, S.L.balBuyBurn, S.L.balMoreBurner]
     .reduce((a, v) => a + (v ?? 0n), 0n);
@@ -3704,6 +3718,7 @@ function buildSeries(logs, coveredFrom, ctx) {
 
   return {
     edges, pooledSeries, rankSeries, supplySeries, inflowDays, inflowByHour: byHour,
+    supplyNow, deadNow: deadCounted ? ctx.deadNow : null,
     fuelBurnedSeries: backFrom(S.burners.fuel?.burnt, fuelBurnFlow),
     moreByFuelSeries: backFrom(S.burners.more?.burnt, moreByFuelFlow),
     negative: pooledSeries.some(v => v < 0n),
@@ -3767,6 +3782,26 @@ async function loadStats() {
     // the chosen range decides the inflow unit, not the window it works out to —
     // early in the protocol's life every range covers only a day or two
     const ctx = { now, start, bucketS, bucketH, days, tsOf, ev, complete: false, inflowByHour: sel === "1" };
+
+    /* FUEL sent to the dead address is out of circulation though totalSupply still counts
+       it, so the supply chart takes it off. Its own scan: one event, filtered to that
+       recipient, which the RPCs serve in a request or two where adding Transfer to the
+       combined query would pull in every trade. Plus what sits there now, as the anchor. */
+    statsSay("Reading FUEL sent to the dead address…");
+    const DEAD = "0x000000000000000000000000000000000000dEaD";
+    try {
+      const transfer = I.token.getEvent("Transfer").topicHash;
+      const [deadRes, deadBal] = await Promise.all([
+        scanLogs(fromBlock, toBlock, [A.token], [transfer, null, E.zeroPadValue(DEAD, 32)], null),
+        mc([{ to: A.token, iface: I.token, fn: "balanceOf", args: [DEAD] }])
+      ]);
+      ctx.deadLogs = deadRes.logs;
+      ctx.deadFrom = deadRes.complete ? fromBlock : deadRes.coveredFrom;
+      ctx.deadNow = deadBal[0] ?? null;
+    } catch (e) {
+      console.warn("[stats] dead-address read failed; the supply chart counts totalSupply only", e);
+      ctx.deadLogs = null; ctx.deadNow = null;
+    }
 
     // Resume rather than give up. A rate limit is temporary, so each pass picks up
     // exactly where the last one stopped and the charts grow backwards as it goes.
@@ -4219,9 +4254,14 @@ function renderStats() {
       color: "#96c99c", unit: NATIVE,
       fmt: nativeAxis(pooledSmall), fmtFull: nativeFull(pooledSmall), zeroFloor: false },
     { title: `${S.K.symbol} in existence`,
-      sub: `Total supply as it actually stands, walked back from the ${fmtTok(S.L.totalSupply, S.K.decimals, S.K.symbol)} ` +
-           `the contract reports now. It rises when a mint or a stake is claimed and falls when a stake is opened ` +
-           `or the protocol burns — staking destroys the principal on this token and mints it back on withdrawal.`,
+      sub: (s.deadNow != null
+             ? `Supply in circulation, walked back from the ${fmtTok(s.supplyNow, S.K.decimals, S.K.symbol)} there is now: ` +
+               `the ${fmtTok(S.L.totalSupply, S.K.decimals, S.K.symbol, false)} the contract reports, less the ` +
+               `${fmtTok(s.deadNow, S.K.decimals, S.K.symbol, false)} sitting at the dead address. `
+             : `Total supply as it actually stands, walked back from the ${fmtTok(S.L.totalSupply, S.K.decimals, S.K.symbol)} ` +
+               `the contract reports now. `) +
+           `It rises when a mint or a stake is claimed and falls when a stake is opened, the protocol burns ` +
+           `or ${S.K.symbol} is sent to the dead address — staking destroys the principal on this token and mints it back on withdrawal.`,
       p: pts(s.supplySeries, v => tok(v, S.K.decimals)), color: "#96c99c",
       fmt: compact, fmtFull: exact, unit: S.K.symbol, zeroFloor: false },
     { title: "Global rank",
