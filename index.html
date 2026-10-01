@@ -4166,6 +4166,15 @@ function renderStats() {
   };
   // the axis is compact for room; a hover has space for the real number
   const exact = v => v.toLocaleString(undefined, { maximumFractionDigits: v < 1 ? 4 : 0 });
+  /* The native coin's charts. ETH on Robinhood comes in fractions and keeps its decimals;
+     PLS runs to millions and billions, which printed in full with three decimals ran off
+     the axis. From a thousand up it goes compact (K, M, B) like the token charts, with
+     the full figure in the hover. Signed, since the pooled line can dip below zero. */
+  const nativeAxis = small => v => v === 0 ? "0"
+    : Math.abs(v) >= 1e3 ? (v < 0 ? "-" : "") + compact(Math.abs(v)) : small(v);
+  const nativeFull = small => v => Math.abs(v) >= 1e3 ? v.toLocaleString(undefined, { maximumFractionDigits: 0 }) : small(v);
+  const inflowSmall = v => v >= 1 ? v.toFixed(2) : v >= 0.01 ? v.toFixed(3) : v.toFixed(4);
+  const pooledSmall = v => v >= 1 ? v.toFixed(3) : v.toFixed(4);
   const pts = (arr, conv) => s.edges.map((t, i) => ({ t, v: conv(arr[i]) }));
   const mSym = S.L.moreSymbol || "MORE", mDec = S.L.moreDecimals ?? 18;
 
@@ -4203,12 +4212,12 @@ function renderStats() {
            `. Faded bars are ${unitWord}s the window only partly covers, the current one included.`,
       p: days.map(d => ({ t: d.t, v: toEth(d.v), partial: d.partial, usd: usdPlain(d.v) })),
       color: "#96c99c", bars: true, unit: NATIVE, hourly: perHour,
-      fmt: v => v >= 1 ? v.toFixed(2) : v >= 0.01 ? v.toFixed(3) : v.toFixed(4) },
+      fmt: nativeAxis(inflowSmall), fmtFull: nativeFull(inflowSmall) },
     { title: "Pooled in burn contracts and the fund",
       sub: "Both burn pools, the pump fund, and fees not yet split, as one figure. It rises as mint fees arrive and falls as burns spend it.",
       p: s.edges.map((t, i) => ({ t, v: toEth(s.pooledSeries[i]), usd: usdPlain(s.pooledSeries[i]) })),
       color: "#96c99c", unit: NATIVE,
-      fmt: v => v >= 1 ? v.toFixed(3) : v.toFixed(4), zeroFloor: false },
+      fmt: nativeAxis(pooledSmall), fmtFull: nativeFull(pooledSmall), zeroFloor: false },
     { title: `${S.K.symbol} in existence`,
       sub: `Total supply as it actually stands, walked back from the ${fmtTok(S.L.totalSupply, S.K.decimals, S.K.symbol)} ` +
            `the contract reports now. It rises when a mint or a stake is claimed and falls when a stake is opened ` +
