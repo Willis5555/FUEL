@@ -600,6 +600,74 @@ header.top .mark .txt{color:var(--neon);text-shadow:0 0 14px rgba(57,255,20,.45)
 .panel > h3{color:var(--neon);text-transform:uppercase;text-align:center}
 .bigstat .v,.stat .v,.chart-tip .v{color:var(--neon)}
 
+/* ---- PAMP polish: the PAMP front end's surfaces, headings and labels ------------------
+   One radius and a soft shadow on every surface, section headings small and left-aligned
+   with a green tick, labels in small letter-spaced capitals, rounded controls. */
+:root{--r:8px;--r-sm:6px;--shadow:0 1px 0 rgba(255,255,255,.03) inset,0 12px 30px -18px rgba(0,0,0,.7)}
+.panel{border-radius:var(--r);box-shadow:var(--shadow);border-color:rgba(53,69,59,.9)}
+.panel > h3{
+  font-size:12px;text-align:left;letter-spacing:.06em;margin-bottom:14px;
+  padding-left:14px;position:relative;text-shadow:0 0 10px rgba(57,255,20,.25)
+}
+.panel > h3::before{
+  content:"";position:absolute;left:0;top:50%;transform:translateY(-50%);
+  width:4px;height:14px;background:var(--neon);border-radius:2px;box-shadow:0 0 8px rgba(57,255,20,.6)
+}
+.bigstat{border-radius:var(--r);background:var(--panel);text-align:left;padding:18px 20px;box-shadow:var(--shadow)}
+.bigstat .k,.stat .k,label.f{
+  font-family:var(--sans);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;font-weight:500;color:var(--text-dim)
+}
+.bigstat .v{font-size:25px}
+.btn,input[type=number],input[type=text],select,.toast{border-radius:var(--r-sm)}
+.btn{transition:background .12s ease,border-color .12s ease,color .12s ease,transform .08s ease}
+.btn:active:not(:disabled){transform:translateY(1px)}
+input:focus,select:focus{box-shadow:0 0 0 3px rgba(150,201,156,.14)}
+.grid3 + .panel,.grid2 + .panel{margin-top:16px}
+
+/* the hero's figures as a row of cards under it, as PAMP's masthead carries its own */
+.hero{grid-template-columns:minmax(0,1fr);gap:22px}
+#heroStats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+#heroStats .stat{border:1px solid rgba(53,69,59,.9);border-radius:var(--r);background:var(--panel);padding:16px 18px;box-shadow:var(--shadow)}
+#heroStats .stat .v{font-size:21px}
+@media(max-width:900px){#heroStats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Stats: one group at a time behind a row of section buttons */
+.subtabs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 20px}
+.subtabs button{
+  background:var(--panel);border:1px solid var(--line);color:var(--text-dim);border-radius:var(--r-sm);
+  padding:9px 16px;font-family:var(--sans);font-size:13.5px;font-weight:500;cursor:pointer;
+  transition:background .12s ease,border-color .12s ease,color .12s ease
+}
+.subtabs button:hover{color:var(--text);border-color:var(--accent-dim)}
+.subtabs button[aria-selected="true"]{color:#0b100d;background:var(--accent);border-color:var(--accent)}
+.sgroup{display:none}
+.sgroup.on{display:block}
+.sgroup > .panel + .panel,.sgroup > .panel + div,.sgroup > div + .panel{margin-top:16px}
+
+/* protocol details: grouped label/value cells instead of one long list */
+.dgroup + .dgroup{margin-top:22px;padding-top:20px;border-top:1px solid var(--line)}
+.dgroup-h{font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--heading);margin:0 0 14px}
+.dgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:18px 26px}
+.dcell{min-width:0}
+.dcell .k{display:block;font-family:var(--sans);font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px}
+.dcell .v{display:block;font-family:var(--serif);font-size:17px;color:var(--neon);line-height:1.3;overflow-wrap:anywhere}
+
+@media(max-width:620px){
+  .subtabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .subtabs::-webkit-scrollbar{display:none}
+  .subtabs button{flex:0 0 auto}
+  .dgrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  /* phone: figures sized to sit on a line or two in a half-width card, and the six
+     headline tiles two abreast rather than six screens of scrolling */
+  #heroStats{gap:10px}
+  #heroStats .stat{padding:12px 13px}
+  #heroStats .stat .v{font-size:15px;line-height:1.35}
+  #protoStats{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  #protoStats .bigstat{padding:13px 14px}
+  #protoStats .bigstat .v{font-size:19px}
+  .dcell .v{font-size:15px}
+}
+
 /* ---- phones: tabs on one scrolling row, position cards stack their payout under
    the facts instead of squeezing beside them, the sort control takes the row ---- */
 @media(max-width:620px){
@@ -880,92 +948,113 @@ header.top .mark .txt{color:var(--neon);text-shadow:0 0 14px rgba(57,255,20,.45)
 
   <!-- ============ STATS ============ -->
   <section class="tab" id="tab-stats">
-    <div class="grid3" id="protoStats"></div>
-    <div class="panel"><h3>Everything else</h3><dl class="kv" id="protoDetail"></dl></div>
-    <div class="grid2">
-    <div class="panel">
-      <h3>Charts</h3>
-      <div class="row" style="align-items:flex-start">
-        <p class="note" style="flex:1">Neither of these is kept as a series on chain. Each line is today's real figure walked backwards through the events that moved it.</p>
-        <select id="statsRange" class="fixed" style="width:150px">
-          <option value="1">Last 24 hours</option>
-          <option value="7">Last 7 days</option>
-          <option value="30">Last 30 days</option>
-          <option value="all" selected>All history</option>
-        </select>
-        <button class="btn sm fixed" id="btnStatsRefresh">Load charts</button>
-      </div>
-      <div id="statsBar" class="progress" hidden></div>
-      <div id="statsMsg" class="derived">Charts are not loaded. Scanning the chain takes a while and the public RPCs rate limit, so it only runs when you ask.</div>
-    </div>
-    <div class="panel">
-      <h3>Late-claim penalty</h3>
-      <p class="note">What a matured mint loses for every day you leave it unclaimed. The marker appears once one of yours is past its unlock date.</p>
-      <div class="chartwrap" id="gaugeWrap">
-        <svg id="gauge" viewBox="0 0 300 150" width="100%" height="150" role="img" aria-label="Penalty curve"></svg>
-        <div class="chart-tip" hidden></div>
-      </div>
-      <div class="derived" style="text-align:center">derived — no contract exposes this curve</div>
-    </div>
-    </div>
-    <div id="statsCharts"></div>
+    <!-- One group at a time, so each thing on this tab is a click away rather than a long
+         scroll down. The URL carries the group (#stats/burners), so a link opens it. -->
+    <nav class="subtabs" id="statsNav" role="tablist" aria-label="Stats sections">
+      <button role="tab" aria-selected="true" data-sgroup="overview">Overview</button>
+      <button role="tab" aria-selected="false" data-sgroup="history">History charts</button>
+      <button role="tab" aria-selected="false" data-sgroup="supply">Future supply</button>
+      <button role="tab" aria-selected="false" data-sgroup="burners">Burners</button>
+      <button role="tab" aria-selected="false" data-sgroup="minters">Top minters</button>
+    </nav>
 
-    <div id="inflationHost"></div>
-
-    <div class="panel">
-      <h3>Top $FUEL burners</h3>
-      <div class="row" style="align-items:flex-start">
-        <p class="note" style="flex:1">Which contracts have destroyed the most $FUEL. Read from
-          the token's own transfers to the dead address and to zero, then attributed to the
-          protocol contract that did the burning &mdash; not to the wallet that held the tokens, and
-          not to a smart wallet or router it happened to be sent through. Staking also burns, and is left out: those tokens come
-          back.</p>
-        <button class="btn sm fixed" id="btnBurnLoad">Load burners</button>
+    <div class="sgroup on" data-sgroup="overview">
+      <div class="grid3" id="protoStats"></div>
+      <div class="panel"><h3>Protocol details</h3><div id="protoDetail"></div></div>
+      <div class="panel">
+        <h3>Late-claim penalty</h3>
+        <p class="note">What a matured mint loses for every day you leave it unclaimed. The marker appears once one of yours is past its unlock date.</p>
+        <div class="chartwrap" id="gaugeWrap">
+          <svg id="gauge" viewBox="0 0 300 150" width="100%" height="150" role="img" aria-label="Penalty curve"></svg>
+          <div class="chart-tip" hidden></div>
+        </div>
+        <div class="derived" style="text-align:center">derived — no contract exposes this curve</div>
       </div>
-      <div id="burnBar" class="progress" hidden></div>
-      <div id="burnMsg" class="derived">Not loaded. This reads every burn transfer and then one
-        receipt per transaction, so it only runs when you ask.</div>
-      <div id="burnList"></div>
     </div>
 
-    <div class="panel">
-      <h3>Top $MORE burners</h3>
-      <div class="row" style="align-items:flex-start">
-        <p class="note" style="flex:1">Which contracts have destroyed the most $MORE. Read from
-          $MORE's own transfers to the zero address and to the dead address, then credited the same
-          way as the list above, to the protocol contract that did the burning. $MORE's DEX fees
-          buy and burn is its own, funded by the fees its Uniswap pools earn; FUEL's buy and burn is
-          funded by FUEL's fee split. $MORE has only ever been minted once, so none of this comes
-          back.</p>
-        <button class="btn sm fixed" id="btnMburnLoad">Load burners</button>
+    <div class="sgroup" data-sgroup="history">
+      <div class="panel">
+        <h3>Charts</h3>
+        <div class="row" style="align-items:flex-start">
+          <p class="note" style="flex:1">Neither of these is kept as a series on chain. Each line is today's real figure walked backwards through the events that moved it.</p>
+          <select id="statsRange" class="fixed" style="width:150px">
+            <option value="1">Last 24 hours</option>
+            <option value="7">Last 7 days</option>
+            <option value="30">Last 30 days</option>
+            <option value="all" selected>All history</option>
+          </select>
+          <button class="btn sm fixed" id="btnStatsRefresh">Load charts</button>
+        </div>
+        <div id="statsBar" class="progress" hidden></div>
+        <div id="statsMsg" class="derived">Charts are not loaded. Scanning the chain takes a while and the public RPCs rate limit, so it only runs when you ask.</div>
       </div>
-      <div id="mburnBar" class="progress" hidden></div>
-      <div id="mburnMsg" class="derived">Not loaded. This reads every $MORE burn transfer and then one
-        receipt per transaction, so it only runs when you ask.</div>
-      <div id="mburnList"></div>
+      <div id="statsCharts"></div>
     </div>
 
-    <div class="panel">
-      <h3>Top Minters</h3>
-      <div class="row" style="align-items:flex-start">
-        <p class="note" style="flex:1">Every wallet holding open mints, ranked by what those mints would pay out. Figures are the same ones the positions tab shows — read per wallet, not estimated. Cost is the fee actually paid to open the mints still held, taken from the mint events, not a re-quote at today's gas; a star marks a wallet whose mints are not all covered by one. This reads a great deal of chain state, so it only runs when you ask.</p>
-        <label class="fixed" style="flex:none;color:var(--muted);font-size:13px;white-space:nowrap">
-          <input type="checkbox" id="topOnlyClaimable" style="width:auto"> Only claimable
-        </label>
-        <select id="topSort" class="fixed" style="width:186px" title="Sort by" aria-label="Sort the list by">
-          <option value="pending" selected>Most FUEL pending</option>
-          <option value="mints">Most mints</option>
-          <option value="unlock">Soonest unlock</option>
-          <option value="overdue">Most past unlock</option>
-          <option value="spent">Most ETH spent</option>
-          <option value="cost">Cheapest per FUEL</option>
-        </select>
-        <button class="btn sm fixed" id="btnTopLoad">Load list</button>
+    <div class="sgroup" data-sgroup="supply">
+      <div id="inflationHost"></div>
+    </div>
+
+    <div class="sgroup" data-sgroup="burners">
+      <div class="panel">
+        <h3>Top $FUEL burners</h3>
+        <div class="row" style="align-items:flex-start">
+          <p class="note" style="flex:1">Which contracts have destroyed the most $FUEL. Read from
+            the token's own transfers to the dead address and to zero, then attributed to the
+            protocol contract that did the burning &mdash; not to the wallet that held the tokens, and
+            not to a smart wallet or router it happened to be sent through. Staking also burns, and is left out: those tokens come
+            back.</p>
+          <button class="btn sm fixed" id="btnBurnLoad">Load burners</button>
+        </div>
+        <div id="burnBar" class="progress" hidden></div>
+        <div id="burnMsg" class="derived">Not loaded. This reads every burn transfer and then one
+          receipt per transaction, so it only runs when you ask.</div>
+        <div id="burnList"></div>
       </div>
-      <div id="topBar" class="progress" hidden></div>
-      <div id="topMsg" class="derived">Not loaded. Finding every holder means scanning the chain for mint events and then reading each wallet's positions, which takes a few minutes on the public RPCs.</div>
-      <div id="topInflight" class="inflight"></div>
-      <div id="topList"></div>
+
+
+      <div class="panel">
+        <h3>Top $MORE burners</h3>
+        <div class="row" style="align-items:flex-start">
+          <p class="note" style="flex:1">Which contracts have destroyed the most $MORE. Read from
+            $MORE's own transfers to the zero address and to the dead address, then credited the same
+            way as the list above, to the protocol contract that did the burning. $MORE's DEX fees
+            buy and burn is its own, funded by the fees its Uniswap pools earn; FUEL's buy and burn is
+            funded by FUEL's fee split. $MORE has only ever been minted once, so none of this comes
+            back.</p>
+          <button class="btn sm fixed" id="btnMburnLoad">Load burners</button>
+        </div>
+        <div id="mburnBar" class="progress" hidden></div>
+        <div id="mburnMsg" class="derived">Not loaded. This reads every $MORE burn transfer and then one
+          receipt per transaction, so it only runs when you ask.</div>
+        <div id="mburnList"></div>
+      </div>
+
+    </div>
+
+    <div class="sgroup" data-sgroup="minters">
+      <div class="panel">
+        <h3>Top Minters</h3>
+        <div class="row" style="align-items:flex-start">
+          <p class="note" style="flex:1">Every wallet holding open mints, ranked by what those mints would pay out. Figures are the same ones the positions tab shows — read per wallet, not estimated. Cost is the fee actually paid to open the mints still held, taken from the mint events, not a re-quote at today's gas; a star marks a wallet whose mints are not all covered by one. This reads a great deal of chain state, so it only runs when you ask.</p>
+          <label class="fixed" style="flex:none;color:var(--muted);font-size:13px;white-space:nowrap">
+            <input type="checkbox" id="topOnlyClaimable" style="width:auto"> Only claimable
+          </label>
+          <select id="topSort" class="fixed" style="width:186px" title="Sort by" aria-label="Sort the list by">
+            <option value="pending" selected>Most FUEL pending</option>
+            <option value="mints">Most mints</option>
+            <option value="unlock">Soonest unlock</option>
+            <option value="overdue">Most past unlock</option>
+            <option value="spent">Most ETH spent</option>
+            <option value="cost">Cheapest per FUEL</option>
+          </select>
+          <button class="btn sm fixed" id="btnTopLoad">Load list</button>
+        </div>
+        <div id="topBar" class="progress" hidden></div>
+        <div id="topMsg" class="derived">Not loaded. Finding every holder means scanning the chain for mint events and then reading each wallet's positions, which takes a few minutes on the public RPCs.</div>
+        <div id="topInflight" class="inflight"></div>
+        <div id="topList"></div>
+      </div>
     </div>
   </section>
 
@@ -2515,24 +2604,30 @@ function renderProtocolStats() {
   const d = $("#protoDetail");
   if (!d) return;
   const gen = Number(L.tokenGenesis ?? 0);
-  const row = (k, v) => `<dt>${k}</dt><dd>${v}</dd>`;
+  /* Grouped label/value cells, the way the PAMP front end lays out its stats: a long
+     two-column list put every value at the far edge of the page from its label. */
+  const cell = (k, v) => `<div class="dcell"><span class="k">${k}</span><span class="v">${v}</span></div>`;
+  const group = (title, cells) => `<div class="dgroup"><div class="dgroup-h">${title}</div><div class="dgrid">${cells}</div></div>`;
   d.innerHTML =
-    row("Protocol day", gen ? Math.floor((chainNow() - gen) / Number(K.SECONDS_IN_DAY ?? 86400n)) + 1 : "—") +
-    row("Opened", gen ? fmtDate(gen) : "—") +
-    row("Term range", `${minTermDays()} to ${maxT ?? "—"} days`) +
-    row("Mints per transaction", K.MAX_BATCH != null ? Number(K.MAX_BATCH).toLocaleString() : "—") +
-    row("Free claim window", `1 day, then a penalty to ${K.MAX_PENALTY_PCT != null ? Number(K.MAX_PENALTY_PCT) : "—"}% over ${K.WITHDRAWAL_WINDOW_DAYS != null ? Number(K.WITHDRAWAL_WINDOW_DAYS) : "—"} days`) +
-    row("Staking rate now", L.apy != null ? Number(L.apy) + "%" : "—") +
-    row("Staking rate floor", K.APY_END != null ? Number(K.APY_END) + "%" : "—") +
-    row("Rate drops one point every", K.APY_DAYS_STEP != null ? Number(K.APY_DAYS_STEP) + " days" : "—") +
-    row("Longest stake term", maxStakeTermDays().toLocaleString() + " days") +
-    row("Minimum stake", fmtTok(K.MIN_STAKE, K.decimals, K.symbol)) +
-    row("Total staked", fmtTok(L.totalStaked, K.decimals, K.symbol)) +
-    row("Open stakes", L.activeStakes != null ? Number(L.activeStakes).toLocaleString() : "—") +
-    row(`${K.symbol} burned`, fmtTok(S.burners.fuel?.burnt, K.decimals, K.symbol)) +
-    row(`${L.moreSymbol || "MORE"} burned`, fmtTok(S.burners.more?.burnt, L.moreDecimals ?? 18, L.moreSymbol || "MORE")) +
-    row("Fees split so far", fmtEth(L.totalDistributed)) +
-    row("Swept from the pump fund", fmtEth(L.totalSwept));
+    group("Protocol",
+      cell("Protocol day", gen ? Math.floor((chainNow() - gen) / Number(K.SECONDS_IN_DAY ?? 86400n)) + 1 : "—") +
+      cell("Opened", gen ? fmtDate(gen) : "—") +
+      cell("Term range", `${minTermDays()} to ${maxT ?? "—"} days`) +
+      cell("Mints per transaction", K.MAX_BATCH != null ? Number(K.MAX_BATCH).toLocaleString() : "—") +
+      cell("Free claim window", `1 day, then a penalty to ${K.MAX_PENALTY_PCT != null ? Number(K.MAX_PENALTY_PCT) : "—"}% over ${K.WITHDRAWAL_WINDOW_DAYS != null ? Number(K.WITHDRAWAL_WINDOW_DAYS) : "—"} days`)) +
+    group("Staking",
+      cell("Staking rate now", L.apy != null ? Number(L.apy) + "%" : "—") +
+      cell("Staking rate floor", K.APY_END != null ? Number(K.APY_END) + "%" : "—") +
+      cell("Rate drops one point every", K.APY_DAYS_STEP != null ? Number(K.APY_DAYS_STEP) + " days" : "—") +
+      cell("Longest stake term", maxStakeTermDays().toLocaleString() + " days") +
+      cell("Minimum stake", fmtTok(K.MIN_STAKE, K.decimals, K.symbol)) +
+      cell("Total staked", fmtTok(L.totalStaked, K.decimals, K.symbol)) +
+      cell("Open stakes", L.activeStakes != null ? Number(L.activeStakes).toLocaleString() : "—")) +
+    group("Burns and fees",
+      cell(`${K.symbol} burned`, fmtTok(S.burners.fuel?.burnt, K.decimals, K.symbol)) +
+      cell(`${L.moreSymbol || "MORE"} burned`, fmtTok(S.burners.more?.burnt, L.moreDecimals ?? 18, L.moreSymbol || "MORE")) +
+      cell("Fees split so far", fmtEth(L.totalDistributed)) +
+      cell("Swept from the pump fund", fmtEth(L.totalSwept)));
 }
 
 function renderHero() {
@@ -4024,7 +4119,9 @@ function svgBars(points, opts) {
            L${(x + bw).toFixed(1)},${base.toFixed(1)} Z" fill="${p.color || opts.color}"${p.partial ? ' opacity="0.45"' : ""}/>`;
     // the hit area is the whole column slot, not just the drawn bar: a zero day is
     // still hoverable, and there is no dead gap between one day and the next
-    const readout = `${(opts.fmtFull || opts.fmt)(v)}${opts.unit ? " " + opts.unit : ""}${p.usd ? " · " + p.usd : ""}`;
+    // a column that counts things (mints maturing that day) says how many alongside the amount
+    const readout = `${(opts.fmtFull || opts.fmt)(v)}${opts.unit ? " " + opts.unit : ""}${p.usd ? " · " + p.usd : ""}` +
+      (p.n != null ? ` · ${p.n.toLocaleString()} mint${p.n === 1 ? "" : "s"}` : "");
     /* Buckets that are not moments in time bring their own label, since a date
        formatter has nothing useful to say about "3 days late". */
     const head = p.label != null ? p.label : lblLong(p.t);
@@ -4661,18 +4758,20 @@ function inflationSchedule(range) {
     const step = win.step, count = win.count;
     const horizon = now + count * step;
     const add = new Array(count + 1).fill(0n);
+    const cnt = new Array(count + 1).fill(0);      // how many mints land in each bucket
     let overdue = 0n, overdueCount = 0, beyond = 0n, beyondCount = 0, inWindow = 0;
     const late = [];
     for (const m of mints) {
       if (m.ts <= now) {
         /* Past due. It is drawn in the first bucket because that is when it can be
            claimed, but its real maturity is kept so the list below can show it. */
-        overdue += m.v; overdueCount++; add[1] += m.v; inWindow++;
+        overdue += m.v; overdueCount++; add[1] += m.v; cnt[1]++; inWindow++;
         late.push({ ts: m.ts, v: m.v, gross: m.gross });
         continue;
       }
       if (m.ts > horizon) { beyond += m.v; beyondCount++; continue; }
-      add[Math.ceil((m.ts - now) / step)] += m.v;
+      const k = Math.ceil((m.ts - now) / step);
+      add[k] += m.v; cnt[k]++;
       inWindow++;
     }
     const pts = [];
@@ -4681,7 +4780,7 @@ function inflationSchedule(range) {
       run += add[i];
       pts.push({ t: now + i * step, v: run });
     }
-    const bars = add.map((v, i) => ({ t: now + i * step, v }));
+    const bars = add.map((v, i) => ({ t: now + i * step, v, n: cnt[i] }));
     late.sort((a, b) => a.ts - b.ts);
     return { pts, bars, hourly: !win.daily, stepDays: 0, spanDays: 1, win,
              overdue, overdueCount, overdueList: late, beyond, beyondCount,
@@ -4698,16 +4797,18 @@ function inflationSchedule(range) {
   const count = Math.ceil((last - now) / step);
 
   const add = new Array(count + 1).fill(0n);
+  const cnt = new Array(count + 1).fill(0);        // how many mints land in each step
   let overdue = 0n, overdueCount = 0;
   const late = [];
   for (const m of mints) {
     // already matured: claimable today, so it lands in the first step rather than the past
     if (m.ts <= now) {
-      overdue += m.v; overdueCount++; add[1] += m.v;
+      overdue += m.v; overdueCount++; add[1] += m.v; cnt[1]++;
       late.push({ ts: m.ts, v: m.v, gross: m.gross });
       continue;
     }
-    add[Math.min(count, Math.ceil((m.ts - now) / step))] += m.v;
+    const k = Math.min(count, Math.ceil((m.ts - now) / step));
+    add[k] += m.v; cnt[k]++;
   }
 
   const pts = [];
@@ -4717,7 +4818,7 @@ function inflationSchedule(range) {
     pts.push({ t: now + i * step, v: run });
   }
   // the same buckets the line accumulates, kept as increments for the column chart
-  const bars = add.map((v, i) => ({ t: now + i * step, v }));
+  const bars = add.map((v, i) => ({ t: now + i * step, v, n: cnt[i] }));
   late.sort((a, b) => a.ts - b.ts);
   return { pts, bars, stepDays, spanDays, overdue, overdueCount, overdueList: late,
            mints: mints.length, end: run };
@@ -4876,7 +4977,7 @@ function renderInflation() {
     host.innerHTML = shell(
       LEAD + " Building it means reading every wallet's open positions, which takes a few " +
       "minutes on the public RPCs, so it only runs when you ask. It shares that read with the " +
-      "Top Minters list below \u2014 loading either one fills both.",
+      "Top minters list \u2014 loading either one fills both.",
       "Load chart");
     return;
   }
@@ -4922,7 +5023,7 @@ function renderInflation() {
   /* The columns are the increments the line accumulates -- same buckets, same
      values, read either as "how much arrives" or "where supply gets to". */
   const stepWord = sch.win ? sch.win.word : sch.stepDays === 1 ? "day" : sch.stepDays + "-day step";
-  const barPts = sch.bars.map(b => ({ t: b.t, v: tok(b.v), usd: fuelUsdPlain(b.v) }));
+  const barPts = sch.bars.map(b => ({ t: b.t, v: tok(b.v), usd: fuelUsdPlain(b.v), n: b.n }));
   const peak = sch.bars.reduce((a, b) => (b.v > a.v ? b : a));
   const barOpts = { fmt: compact, fmtFull: exact, color: "#b2e5ba", unit: S.K.symbol,
                     label: `${S.K.symbol} minted per ${stepWord}`, hourly: !!sch.hourly, height: 250 };
@@ -4960,7 +5061,8 @@ function renderInflation() {
     `<h3 style="margin:26px 0 10px">${S.K.symbol} minted per ${stepWord}</h3>
      <p class="note">What each ${stepWord} actually brings, rather than where the running total
        gets to \u2014 these columns are the steps the line above adds up. The heaviest is
-       <strong>${fmtTok(peak.v, dec, S.K.symbol)}</strong> ${sch.hourly
+       <strong>${fmtTok(peak.v, dec, S.K.symbol)}</strong> from
+       <strong>${(peak.n || 0).toLocaleString()} mint${peak.n === 1 ? "" : "s"}</strong> ${sch.hourly
          ? (sch.win && sch.win.daily
              ? "on " + fmtDate(peak.t)
              : "in the " + sch.win.word + " to " + new Date(peak.t * 1000).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }))
@@ -6839,11 +6941,23 @@ try {
      point at one: .../#liquidity opens the liquidity panel directly. Mint is the
      default and carries no hash, which keeps the bare URL clean. */
   const TABS = $$("nav.tabs button").map(b => b.dataset.tab);
-  function selectTab(name) {
+  /* The Stats tab's groups. The last one picked is kept, so going back to Stats lands
+     where you were; the URL names it whenever it is not the first. */
+  const SGROUPS = $$("#statsNav [data-sgroup]").map(b => b.dataset.sgroup);
+  let sgroupNow = SGROUPS[0];
+  function selectStatsGroup(g) {
+    if (!SGROUPS.includes(g)) g = sgroupNow;
+    sgroupNow = g;
+    $$("#statsNav [data-sgroup]").forEach(x => x.setAttribute("aria-selected", String(x.dataset.sgroup === g)));
+    $$("#tab-stats .sgroup").forEach(x => x.classList.toggle("on", x.dataset.sgroup === g));
+    return g;
+  }
+  function selectTab(name, sub) {
     if (!TABS.includes(name)) name = TABS[0];
     $$("nav.tabs button").forEach(x => x.setAttribute("aria-selected", String(x.dataset.tab === name)));
     $$("section.tab").forEach(sec => sec.classList.toggle("on", sec.id === "tab-" + name));
-    const want = name === TABS[0] ? "" : "#" + name;
+    const g = name === "stats" ? selectStatsGroup(sub) : null;
+    const want = name === TABS[0] ? "" : "#" + name + (g && g !== SGROUPS[0] ? "/" + g : "");
     if (location.hash !== want && !(name === TABS[0] && !location.hash)) {
       history.replaceState(null, "", location.pathname + location.search + want);
     }
@@ -6858,13 +6972,15 @@ try {
     selectTab(b.dataset.tab);
     tabOpened(b.dataset.tab);
   }));
-  selectTab(location.hash.slice(1));
+  const fromHash = () => location.hash.slice(1).split("/");
+  selectTab(...fromHash());
   /* Back, forward, and a pasted link all arrive the same way. */
   window.addEventListener("hashchange", () => {
-    const name = location.hash.slice(1);
-    selectTab(name);
+    const [name, sub] = fromHash();
+    selectTab(name, sub);
     tabOpened(TABS.includes(name) ? name : TABS[0]);
   });
+  $$("#statsNav [data-sgroup]").forEach(b => b.addEventListener("click", () => selectTab("stats", b.dataset.sgroup)));
 
   on("#btnConnect", "click", connect);
 
@@ -7126,7 +7242,7 @@ function refreshStatPanels() {
       panelErrShown = true;
       console.error("[render] stat panels failed:", e);
       const d = $("#protoDetail");
-      if (d) d.innerHTML = `<dt>Could not draw</dt><dd>${(e && e.message) || e}</dd>`;
+      if (d) d.innerHTML = `<div class="derived">Could not draw: ${(e && e.message) || e}</div>`;
     }
   }
 }
