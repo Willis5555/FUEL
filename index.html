@@ -162,6 +162,19 @@ a.btn{display:inline-block;text-decoration:none;cursor:pointer}
 }
 .netbtn[data-net="pulsechain"]:hover{color:#fff;opacity:.85}
 .netbtn[data-net="pulsechain"].on{color:#fff;opacity:1}
+/* Ethereum: the same outlined button, in Ethereum's own blues */
+.netbtn[data-net="ethereum"],
+.netbtn + .netbtn[data-net="ethereum"]{
+  color:var(--text-dim);
+  border:1.5px solid transparent;
+  background:
+    linear-gradient(var(--bg), var(--bg)) padding-box,
+    linear-gradient(100deg, #c3a6ff 0%, #8a63f0 35%, #627eea 65%, #a9b8ff 100%) border-box;
+  opacity:.62;
+  transition:opacity .12s,color .12s;
+}
+.netbtn[data-net="ethereum"]:hover{color:#fff;opacity:.85}
+.netbtn[data-net="ethereum"].on{color:#fff;opacity:1}
 .netbtn[data-net="pulsechain"] .soon{color:#fff;border-color:rgba(255,255,255,.75)}
 
 .netbtn .soon{
@@ -1151,6 +1164,57 @@ const NETWORKS = {
       posManager:  null,
       multicall:   "0xcA11bde05977b3631167028862bE2a173976CA11"
     }
+  },
+  ethereum: {
+    key: "ethereum", label: "Ethereum",
+    id: 1, hex: "0x1", name: "Ethereum",
+    rpc: "https://ethereum-rpc.publicnode.com",
+    rpcs: [
+      /* No free Ethereum endpoint does everything. publicnode answers calls fast but keeps
+         only the last ~10k blocks of logs ("archive requests require a personal token");
+         Tenderly's public gateway has the whole log history and serves ten-million-block
+         ranges, but rate limits anything beyond a few calls at once, so it carries log scans
+         only; MEV Blocker has the history too, in ranges of up to 10k blocks for a busy
+         query; dRPC's free plan refuses getLogs outright. */
+      { url: "https://ethereum-rpc.publicnode.com", gap: 100, batch: 20, noLogs: true },
+      { url: "https://gateway.tenderly.co/public/mainnet", gap: 250, batch: 1, logsOnly: true },
+      { url: "https://rpc.mevblocker.io", gap: 150, batch: 10, logSpan: 10000 },
+      { url: "https://eth.drpc.org", gap: 150, batch: 3, noLogs: true }
+    ],
+    explorer: "https://etherscan.io",
+    currency: { name: "Ether", symbol: "ETH", decimals: 18 },
+    coingecko: "ethereum",
+    poolKind: "v3",          // Uniswap V3 pool: the price is slot0
+    burnerKind: "eth",       // the same burner build as Robinhood
+    pinGas: true,            // fee-paying transactions carry their own gas ceiling: see pinnedGas()
+    /* Ethereum caps a transaction at 2^24 = 16,777,216 gas (EIP-7825). Opening a mint costs
+       about 212,500 gas plus ~70k per transaction, so the contract's 100 cannot fit: 78 is
+       the ceiling, and 70 (~14.9M) leaves room for a wallet that pads its estimate. Claiming
+       and reopening costs ~120k a mint, so a 70-mint batch claims well inside the cap. */
+    maxMintsPerTx: 70,
+    fromBlock: 26128767,     // FUEL token 0x465B...3547 created
+    moreFromBlock: 15251533, // $MORE 0xbEEf...85D0 created (July 2022)
+    /* The launch, 5 Oct (dev nonces 3055-3060), checked on chain: all five point at each
+       other, batchFee(1) equals the token's mintFee (0.00015 ETH below 1 gwei), and every
+       function this page calls exists on each. Two earlier sets that morning were replaced
+       and are not used: the unconfigured token 0x11c9...15A4 and the 0xEFea...9341 set.
+       The FUEL/WETH pool has FUEL as token0 -- the reverse of Robinhood, which the Liquidity
+       tab's tick maths assumes -- so that tab is left out here until it handles both. */
+    live: true,
+    addrs: {
+      token:       "0x465B7E1c2BcC86bc6C2d8AD786e7d1359C3E3547",
+      more:        "0xbEEf3bB9dA340EbdF0f5bae2E85368140d7D85D0",
+      batchMinter: "0x5e805d1651c1CFBA5D6d61974Bf1DB296aAc67e3",
+      feeDist:     "0x2F7F31434cAC4A87800A8FEeB6BD89f6C8baB17b",
+      vault:       "0xD4a4A08EF01a8C4D2dc04c2DCd5a05dda16124D1",
+      buyBurn:     "0x2a39Cf3bA3B95a3c9814668365Fff35500a1ae0b",
+      moreBurner:  null,            // resolved on chain from feeDist.moreBurner()
+      moreBurnerExpected: "0x3FD4EdC8bfe779145f57EaD04F6a1179fF99cDB5",
+      pool:        "0x917529659D0c2aa333bdde99e6534375BA217399",   // FUEL/WETH 1%, Uniswap V3
+      weth:        "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      posManager:  null,
+      multicall:   "0xcA11bde05977b3631167028862bE2a173976CA11"
+    }
   }
 };
 
@@ -1860,6 +1924,7 @@ async function boot() {
     url: cfg.url,
     gap: cfg.gap || 100,
     noLogs: !!cfg.noLogs,
+    logsOnly: !!cfg.logsOnly,
     provider: new E.JsonRpcProvider(timedRequest(cfg.url), { chainId: CHAIN.id, name: "robinhood" },
       { staticNetwork: true, batchMaxCount: cfg.batch || 1 }),
     ok: true,
@@ -1943,6 +2008,8 @@ async function loadConstants() {
   let k = names.length;
   S.K.decimals   = r[k++]; S.K.symbol = r[k++] || "FUEL";
   S.K.MAX_BATCH  = r[k++];
+  // a chain that caps transaction gas below what the contract's batch needs (Ethereum)
+  if (NET.maxMintsPerTx && S.K.MAX_BATCH != null && S.K.MAX_BATCH > BigInt(NET.maxMintsPerTx)) S.K.MAX_BATCH = BigInt(NET.maxMintsPerTx);
   S.K.VAULT_BPS  = r[k++]; S.K.BURN_BPS = r[k++]; S.K.MORE_BPS = r[k++];
   S.K.FD_BPS_DEN = r[k++]; S.K.MIN_DISTRIBUTE = r[k++];
   A.moreBurner   = r[k++];
@@ -2640,6 +2707,17 @@ function renderHero() {
     return;
   }
   const all = S.soloMint ? [...S.positions, S.soloMint] : S.positions;
+  /* On the lighter read (any tab but Positions) the mints themselves are not loaded, only how
+     many the wallet has opened through the batch minter -- so "no open mints" was wrong for a
+     wallet holding hundreds. Say what is known, and where the rest is. */
+  const opened = Number(S.userData?.proxyCount || 0);
+  if (S.userLite && !S.positions.length && opened > 0) {
+    lab.textContent = "Your mints";
+    big.textContent = `${opened.toLocaleString()} mint${opened === 1 ? "" : "s"} opened`;
+    sub.textContent = "Their unlock dates, deadlines and what each is worth load on the Positions tab.";
+    drawGauge(null);
+    return;
+  }
   if (!all.length) {
     lab.textContent = "Your next deadline";
     big.textContent = "No open mints";
@@ -2703,7 +2781,8 @@ function renderMintSide() {
 
   $("#mintWallet").innerHTML = S.account
     ? statRow("Your balance", fmtTok(S.balance, S.K.decimals, S.K.symbol), true) +
-      statRow("Mints you have opened", String(S.positions.length + (S.soloMint ? 1 : 0)), true) +
+      // the lighter read has only the count, which is what this line wants anyway
+      statRow("Mints you have opened", String((S.userLite ? Number(S.userData?.proxyCount || 0) : S.positions.length) + (S.soloMint ? 1 : 0)), true) +
       statRow("Next index", String(nextMintIndex()), true)
     : `<div class="empty">Not connected.</div>`;
 
@@ -3424,7 +3503,8 @@ function endpointOk(entry) {
 
 function pickEndpoint(forLogs, wantSpan) {
   const now = Date.now();
-  let usable = S.pool.filter(e => e.ok && (!forLogs || !e.noLogs));
+  // noLogs keeps an endpoint off log queries; logsOnly keeps it to them
+  let usable = S.pool.filter(e => e.ok && (!forLogs || !e.noLogs) && (forLogs || !e.logsOnly));
   // prefer one that will actually serve a range this wide, rather than discovering
   // it cannot and making every other endpoint pay for that
   if (wantSpan) {
@@ -5998,10 +6078,15 @@ Object.assign(BURN_NAMES, {
   "0xef4169784cd9af824ad4ad609cd97f1df19607ed": { name: "FeeDistributor", mark: "fuel" },
   /* $PAMP's PulseChain auction: every entry burns FUEL. Same Telegram as the Robinhood one;
      its logo opens the PulseChain PAMP site. */
-  "0x0cb79f2123da9fba7ee8fcad12206c959525eb72": { name: "PAMP daily auction", mark: "pamp", site: "https://pulsepamp.github.io/369/" }
+  "0x0cb79f2123da9fba7ee8fcad12206c959525eb72": { name: "PAMP daily auction", mark: "pamp", site: "https://pulsepamp.github.io/369/" },
+  // Ethereum
+  "0x2a39cf3ba3b95a3c9814668365fff35500a1ae0b": { name: "FUEL buy and burn", mark: "fuel" },
+  "0x5e805d1651c1cfba5d6d61974bf1db296aac67e3": { name: "BatchMinter", mark: "fuel" },
+  "0x2f7f31434cac4a87800a8feeb6bd89f6c8bab17b": { name: "FeeDistributor", mark: "fuel" }
 });
 Object.assign(MORE_BURN_NAMES, {
   "0xe1d2ce1d0ace5cd52dda0ec5d73cb2e024123235": { name: "FUEL buy and burn", mark: "fuel" },
+  "0x3fd4edc8bfe779145f57ead04f6a1179ff99cdb5": { name: "FUEL buy and burn", mark: "fuel" },   // Ethereum
   /* Not a contract burning: wallets calling transfer() on $MORE itself with the dead
      address as recipient (most of it in November 2022), so the transaction's target
      is the token. */
@@ -6816,8 +6901,17 @@ function pinnedGas(fd) {
   if (!NET.pinGas || !fd || fd.maxFeePerGas == null || fd.maxPriorityFeePerGas == null) return null;
   const base = (fd.maxFeePerGas - fd.maxPriorityFeePerGas) / 2n;
   if (base <= 0n) return null;
-  const cap = base * 2n;
-  const tip = fd.maxPriorityFeePerGas <= base ? fd.maxPriorityFeePerGas : base / 4n;
+  /* PulseChain's fee is a hundred times the gas paid, so its tip is kept small and the
+     ceiling at twice the base fee. Ethereum's fee has a 1 gwei floor and no multiplier, so
+     it keeps the tip the RPC suggests (inclusion depends on it there) on top of the usual
+     twice-base headroom. */
+  const lean = NET.key === "pulsechain";
+  /* Ethereum's suggested tip can be a few thousand wei on a quiet day, which some builders
+     leave waiting; 0.01 gwei is the floor (about $0.40 on a 70-mint batch). */
+  const TIP_FLOOR = 10000000n;
+  const ethTip = fd.maxPriorityFeePerGas > TIP_FLOOR ? fd.maxPriorityFeePerGas : TIP_FLOOR;
+  const tip = lean ? (fd.maxPriorityFeePerGas <= base ? fd.maxPriorityFeePerGas : base / 4n) : ethTip;
+  const cap = lean ? base * 2n : base * 2n + tip;
   return { cap, overrides: { maxFeePerGas: cap, maxPriorityFeePerGas: tip } };
 }
 function withBuffer(v) { return v + v * FEE_BUFFER_BPS / 10000n; }
