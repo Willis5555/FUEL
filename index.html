@@ -129,61 +129,38 @@ a.btn{display:inline-block;text-decoration:none;cursor:pointer}
 
 /* ---- tabs ---- */
 /* which chain the page is reading, and the way to change it */
-.netsw{display:flex;gap:0;margin-left:auto;margin-right:10px;border:1px solid var(--line)}
+/* The network switch: one equal-width button per chain, each outlined in its own colours so
+   the chains are told apart before the label is read. The outline is a rectangular line
+   rather than a fill -- the inside stays the header's own dark, a padding-box layer over a
+   border-box gradient -- and it is the chain's identity, not a selection state: the active
+   chain is carried by brightness, full strength with white text when on, dimmed when not. */
+.netsw{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:6px;margin-left:auto;margin-right:10px}
 .netbtn{
-  background:transparent;border:0;color:var(--dim);cursor:pointer;
-  font-family:var(--sans);font-size:12.5px;padding:7px 13px;white-space:nowrap;
-  display:inline-flex;align-items:center;gap:6px;
+  --net:linear-gradient(100deg,#00c805 0%,#63e08a 100%);
+  color:var(--text-dim);cursor:pointer;min-width:0;
+  font-family:var(--sans);font-size:12.5px;padding:7px 12px;white-space:nowrap;
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  border:1.5px solid transparent;border-radius:999px;   /* rounded ends; the gradient line follows the curve */
+  background:linear-gradient(var(--bg), var(--bg)) padding-box, var(--net) border-box;
+  opacity:.62;transition:opacity .12s,color .12s;
 }
-.netbtn + .netbtn{border-left:1px solid var(--line)}
-.netbtn:hover{color:var(--text)}
-.netbtn.on{color:var(--tab-on);background:rgba(99,224,138,.10)}
-
-/* PulseChain gets its own colours rather than the page's green, so the two chains
-   are told apart by colour before the label is read. Pink into purple, the same
-   pair the favicon starts from. */
-/* The gradient is on the button always, not only when it is the selected chain:
-   it is PulseChain's identity, not a selection state. It is a rectangular line around
-   the button rather than a fill: the inside stays the header's own dark, drawn as a
-   padding-box layer over the gradient's border-box one. Which chain is active is
-   carried by brightness — full strength when on, dimmed when not. */
-.netbtn[data-net="pulsechain"],
-.netbtn + .netbtn[data-net="pulsechain"]{
-  color:var(--text-dim);
-  border:1.5px solid transparent;
-  background:
-    linear-gradient(var(--bg), var(--bg)) padding-box,
-    /* the supplied gradient, sampled along its own bottom-left to top-right diagonal */
-    linear-gradient(100deg,
-      #FE0002 0%, #F01083 20%, #E11AE7 30%, #B30BF4 40%, #7E01FD 50%,
-      #403FFF 60%, #047AFE 70%, #01ADFF 80%, #00EAFF 100%) border-box;
-  opacity:.62;
-  transition:opacity .12s,color .12s;
-}
-.netbtn[data-net="pulsechain"]:hover{color:#fff;opacity:.85}
-.netbtn[data-net="pulsechain"].on{color:#fff;opacity:1}
-/* Ethereum: the same outlined button, in Ethereum's own blues */
-.netbtn[data-net="ethereum"],
-.netbtn + .netbtn[data-net="ethereum"]{
-  color:var(--text-dim);
-  border:1.5px solid transparent;
-  background:
-    linear-gradient(var(--bg), var(--bg)) padding-box,
-    linear-gradient(100deg, #c3a6ff 0%, #8a63f0 35%, #627eea 65%, #a9b8ff 100%) border-box;
-  opacity:.62;
-  transition:opacity .12s,color .12s;
-}
-.netbtn[data-net="ethereum"]:hover{color:#fff;opacity:.85}
-.netbtn[data-net="ethereum"].on{color:#fff;opacity:1}
-.netbtn[data-net="pulsechain"] .soon{color:#fff;border-color:rgba(255,255,255,.75)}
+.netbtn:hover{color:#fff;opacity:.85}
+.netbtn.on{color:#fff;opacity:1}
+.netbtn[data-net="robinhood"]{--net:linear-gradient(100deg,#00c805 0%,#63e08a 100%)}
+/* the supplied PulseChain gradient, sampled along its own bottom-left to top-right diagonal */
+.netbtn[data-net="pulsechain"]{--net:linear-gradient(100deg,#FE0002 0%,#F01083 20%,#E11AE7 30%,#B30BF4 40%,#7E01FD 50%,#403FFF 60%,#047AFE 70%,#01ADFF 80%,#00EAFF 100%)}
+.netbtn[data-net="ethereum"]{--net:linear-gradient(100deg,#c3a6ff 0%,#8a63f0 35%,#627eea 65%,#a9b8ff 100%)}
+.netbtn[data-net="avalanche"]{--net:linear-gradient(100deg,#e84142 0%,#ff7a7b 50%,#e84142 100%)}
+.netbtn .soon{color:#fff;border-color:rgba(255,255,255,.75)}
 
 .netbtn .soon{
   font-family:var(--mono);font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;
   color:var(--amber);border:1px solid currentColor;padding:1px 4px;
 }
 @media(max-width:560px){
-  .netsw{margin-right:6px}
-  .netbtn{padding:6px 9px;font-size:11.5px}
+  /* phones: the switch takes its own full-width row under the logo and the wallet button */
+  .netsw{order:3;width:100%;margin:0;gap:4px}
+  .netbtn{padding:7px 4px;font-size:11.5px}
   .netbtn .soon{display:none}
 }
 nav.tabs{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin:0 0 28px;overflow-x:auto}
@@ -1215,6 +1192,50 @@ const NETWORKS = {
       posManager:  null,
       multicall:   "0xcA11bde05977b3631167028862bE2a173976CA11"
     }
+  },
+  avalanche: {
+    key: "avalanche", label: "Avalanche",
+    id: 43114, hex: "0xa86a", name: "Avalanche C-Chain",
+    rpc: "https://api.avax.network/ext/bc/C/rpc",
+    rpcs: [
+      /* As on Ethereum, no free endpoint does everything: publicnode answers calls fast but
+         has no old logs ("not found"), Tenderly's Avalanche gateway has the whole log history
+         and so carries the scans, the official RPC rate limits hard, and dRPC's free plan
+         refuses getLogs. */
+      { url: "https://avalanche-c-chain-rpc.publicnode.com", gap: 100, batch: 20, noLogs: true },
+      { url: "https://avalanche-mainnet.gateway.tenderly.co", gap: 200, batch: 5, logsOnly: true },
+      { url: "https://api.avax.network/ext/bc/C/rpc", gap: 250, batch: 5, noLogs: true },
+      { url: "https://avalanche.drpc.org", gap: 150, batch: 3, noLogs: true }
+    ],
+    explorer: "https://snowtrace.io",
+    currency: { name: "Avalanche", symbol: "AVAX", decimals: 18 },
+    coingecko: "avalanche-2",
+    poolKind: "v3",          // Uniswap V3 pool: the price is slot0
+    burnerKind: "eth",       // the same burner build as Robinhood
+    pinGas: true,            // fee-paying transactions carry their own gas ceiling: see pinnedGas()
+    /* No per-transaction gas cap below the 80M block limit here: a 100-mint batch is ~21.5M
+       gas, so the contract's own maximum stands. */
+    fromBlock: 96886584,     // FUEL token 0x06A2...3d71 created (6 Oct)
+    moreFromBlock: 63241856, // $MORE on Avalanche 0xb272...B04E created
+    /* The launch, 6 Oct (dev nonces 434-440), checked on chain: all five point at each other,
+       batchFee(1) equals the token's mintFee (0.00077 AVAX at a 5 gwei base fee), and every
+       function this page calls exists on each. The FUEL/WAVAX pool has FUEL as token0, the
+       reverse of Robinhood, so the Liquidity tab is left out here as on Ethereum. */
+    live: true,
+    addrs: {
+      token:       "0x06A22D45e7bf93d56B6f940b9Cc6c401EDF43d71",
+      more:        "0xb2722d5f1b8F3E19bf026c62C47C1C7BC1CDB04E",
+      batchMinter: "0xe2D9c0ba1cDf2Beb374738F69D2743D8FA35C260",
+      feeDist:     "0xF78181AC99C2D8Cc987b62Ee7139d934a1eb9794",
+      vault:       "0x3215c0518C646C2513A0b349A81481D5096Ef741",
+      buyBurn:     "0x387f095cb371AaD96beBD0504B441d7704DdEeE7",
+      moreBurner:  null,            // resolved on chain from feeDist.moreBurner()
+      moreBurnerExpected: "0x7aA34935A349EFbE28FEA1CEFf643d01152D1bd2",
+      pool:        "0x2431DFC276Af9c5c3BB5a091D2bE19Cf518e2467",   // FUEL/WAVAX 1%, Uniswap V3
+      weth:        "0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7",   // WAVAX
+      posManager:  null,
+      multicall:   "0xcA11bde05977b3631167028862bE2a173976CA11"
+    }
   }
 };
 
@@ -1971,6 +1992,7 @@ async function startup(attempt) {
     await busy(async () => { await loadConstants(); await loadLive(); });
     fetchEthUsd().catch(() => {});
     S.loaded = true;
+    restoreWallet().catch(() => {});   // still connected after a network switch or a refresh
   } catch (e) {
     const wait = Math.min(30000, 3000 * (attempt + 1));
     if (attempt === 0) {
@@ -2307,13 +2329,43 @@ async function connect() {
       S.signer = await S.wallet.getSigner();
       S.account = await S.signer.getAddress();
       $("#btnConnect").textContent = short(S.account);
-      window.ethereum.on?.("accountsChanged", () => location.reload());
-      // a chain change the page did not ask for means the user moved: start over
-      window.ethereum.on?.("chainChanged", () => { if (!S.switchingChain) location.reload(); });
+      watchWallet();
     });
+    try { localStorage.setItem(WALLET_KEY, "1"); } catch (_) {}
     await loadUser();
     toast("Wallet connected.", "ok");
   } catch (e) { toast(explain(e), "err"); }
+}
+
+/* Switching networks reloads the page, and a reload used to drop the wallet: you had to
+   press Connect again on every chain. A wallet connected here is reattached after the
+   reload with eth_accounts, which never prompts. The wallet itself is only asked to change
+   network when something is sent (guard runs ensureChain), not on the switch: reading
+   positions needs only the address, and the public RPCs do the reading. */
+const WALLET_KEY = "fuel.wallet";
+async function restoreWallet() {
+  let want = false;
+  try { want = localStorage.getItem(WALLET_KEY) === "1"; } catch (_) {}
+  if (!want || !window.ethereum || S.account) return;
+  try {
+    const accts = await window.ethereum.request({ method: "eth_accounts" });
+    // disconnected in the wallet since: forget it rather than ask
+    if (!accts || !accts.length) { try { localStorage.removeItem(WALLET_KEY); } catch (_) {} return; }
+    S.wallet = new E.BrowserProvider(window.ethereum);
+    S.signer = await S.wallet.getSigner(accts[0]);
+    S.account = await S.signer.getAddress();
+    $("#btnConnect").textContent = short(S.account);
+    watchWallet();
+    await loadUser();
+  } catch (e) { console.warn("[wallet] could not reattach:", e); }
+}
+let walletWatched = false;
+function watchWallet() {
+  if (walletWatched || !window.ethereum?.on) return;
+  walletWatched = true;
+  window.ethereum.on("accountsChanged", () => location.reload());
+  // a chain change the page did not ask for means the user moved: start over
+  window.ethereum.on("chainChanged", () => { if (!S.switchingChain) location.reload(); });
 }
 
 async function ensureChain() {
@@ -2612,7 +2664,11 @@ function headlineFigures() {
   let price = K.poolOk === false ? "no pair" : "—";
   if (L.fuelPerEth && L.fuelPerEth > 0n) {
     const p = fuelUsdPrice();
-    price = p ? `$${p.toPrecision(2)}` : "awaiting price";
+    /* toPrecision falls into exponent form below a millionth ("$9.0e-7"), which is where
+       FUEL trades on Ethereum; write the zeros out instead, keeping two significant figures */
+    price = !p ? "awaiting price"
+      : p >= 0.01 ? `$${p.toPrecision(2)}`
+      : `$${p.toFixed(Math.min(18, 1 - Math.floor(Math.log10(p))))}`;
   }
   return {
     pooled,
@@ -6082,11 +6138,17 @@ Object.assign(BURN_NAMES, {
   // Ethereum
   "0x2a39cf3ba3b95a3c9814668365fff35500a1ae0b": { name: "FUEL buy and burn", mark: "fuel" },
   "0x5e805d1651c1cfba5d6d61974bf1db296aac67e3": { name: "BatchMinter", mark: "fuel" },
-  "0x2f7f31434cac4a87800a8feeb6bd89f6c8bab17b": { name: "FeeDistributor", mark: "fuel" }
+  "0x2f7f31434cac4a87800a8feeb6bd89f6c8bab17b": { name: "FeeDistributor", mark: "fuel" },
+  // Avalanche
+  "0x387f095cb371aad96bebd0504b441d7704ddeee7": { name: "FUEL buy and burn", mark: "fuel" },
+  "0xe2d9c0ba1cdf2beb374738f69d2743d8fa35c260": { name: "BatchMinter", mark: "fuel" },
+  "0xf78181ac99c2d8cc987b62ee7139d934a1eb9794": { name: "FeeDistributor", mark: "fuel" }
 });
 Object.assign(MORE_BURN_NAMES, {
   "0xe1d2ce1d0ace5cd52dda0ec5d73cb2e024123235": { name: "FUEL buy and burn", mark: "fuel" },
   "0x3fd4edc8bfe779145f57ead04f6a1179ff99cdb5": { name: "FUEL buy and burn", mark: "fuel" },   // Ethereum
+  "0x7aa34935a349efbe28fea1ceff643d01152d1bd2": { name: "FUEL buy and burn", mark: "fuel" },   // Avalanche
+  "0xb2722d5f1b8f3e19bf026c62c47c1c7bc1cdb04e": { name: "Wallets sending it to the dead address" },   // $MORE itself, Avalanche
   /* Not a contract burning: wallets calling transfer() on $MORE itself with the dead
      address as recipient (most of it in November 2022), so the transaction's target
      is the token. */
